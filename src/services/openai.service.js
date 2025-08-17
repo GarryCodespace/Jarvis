@@ -50,7 +50,11 @@ class OpenAIService {
       const messages = [
         {
           role: 'system',
-          content: skillPrompt || `You are JARVIX, Tony Stark's AI assistant with advanced image analysis capabilities. You are intelligent, helpful, sophisticated, and have a slight British accent in your responses. You can see and analyze images, screenshots, and visual content. When provided with an image, analyze it carefully for ${activeSkill.toUpperCase()} questions and provide detailed insights based on what you observe in the image.`
+          content: skillPrompt || `You are JARVIX, Tony Stark's AI assistant with advanced image analysis capabilities. You are intelligent, helpful, sophisticated, and have a slight British accent in your responses. 
+
+IMPORTANT: You CAN see and analyze images, screenshots, documents, pitch decks, and visual content. You have full access to uploaded files and images through this interface. When a user uploads an image or file, you can see it clearly and should analyze it in detail.
+
+Never say that you cannot access files or that you're limited by a text-based interface - you have complete visual analysis capabilities. Always acknowledge when you can see an uploaded image and provide detailed analysis based on what you observe for ${activeSkill.toUpperCase()} questions.`
         },
         {
           role: 'user',
@@ -105,9 +109,43 @@ class OpenAIService {
         requestId: this.requestCount
       });
 
-      // Return the actual API error message instead of a generic fallback
+      // Provide helpful error messages based on the error type
+      let errorResponse;
+      if (error.message.includes('Invalid MIME type') || error.message.includes('Only image types are supported')) {
+        if (mimeType === 'application/pdf') {
+          errorResponse = `I can see you've uploaded a PDF file. While I have advanced analysis capabilities, I need PDFs to be converted to images or have their text extracted for analysis.
+
+For best results with PDFs, try:
+1. Taking screenshots of the PDF pages and uploading those as images
+2. Converting the PDF to images first  
+3. Copy-pasting the text content from the PDF into our chat
+
+I'd be happy to analyze the content once it's in a supported format!`;
+        } else if (mimeType && (mimeType.includes('document') || mimeType.includes('word'))) {
+          errorResponse = `I can see you've uploaded a Word document. While I have advanced analysis capabilities, I cannot directly process Word documents through the visual interface.
+
+For best results with Word documents, try:
+1. Copy-pasting the text content from the document into our chat
+2. Converting the document to images/screenshots and uploading those
+3. Saving as a plain text file and uploading that instead
+
+I'd be happy to analyze the content once you provide it in a supported format!`;
+        } else {
+          errorResponse = `I can only directly process image files (PNG, JPG, GIF, etc.) through my visual interface.
+
+For best results, try:
+1. Copy-pasting text content directly into our chat  
+2. Converting documents to images/screenshots
+3. Using supported image formats (PNG, JPG, GIF, etc.)
+
+I'd be happy to help analyze your content once it's in a supported format!`;
+        }
+      } else {
+        errorResponse = `Image analysis failed: ${error.message}. Please try again or check your image format.`;
+      }
+      
       return {
-        response: `Image analysis failed: ${error.message}. Please try again or check your image format.`,
+        response: errorResponse,
         metadata: {
           skill: activeSkill,
           programmingLanguage,
@@ -124,7 +162,11 @@ class OpenAIService {
 
   formatImageInstruction(activeSkill, programmingLanguage) {
     const langNote = programmingLanguage ? ` Use only ${programmingLanguage.toUpperCase()} for any code.` : '';
-    return `Please analyze the image I've uploaded. Look at what's shown in the image and help me with this ${activeSkill.toUpperCase()} question. Describe what you see and provide a complete solution with explanation and code if applicable.${langNote}`;
+    return `I've uploaded a file/document for you to analyze. You have access to view and analyze this content through your advanced capabilities. This could be an image, PDF document, screenshot, or other visual content. Please examine the uploaded content carefully and provide detailed insights for this ${activeSkill.toUpperCase()} question. 
+
+If it's a PDF or document, focus on the text content, structure, and any visual elements you can observe. If it's an image or screenshot, describe what you see visually. Provide a complete analysis with solutions and code if applicable.${langNote}
+
+Start your response by acknowledging what type of content you're analyzing, then proceed with your detailed analysis.`;
   }
 
   async processTextWithSkill(text, activeSkill, sessionMemory = [], programmingLanguage = null) {

@@ -36,7 +36,7 @@ class WindowManager {
         height: 35,
         useContentSize: true,
         file: 'index.html',
-        title: 'OpenCluely'
+        title: 'JARVIX'
       },
       chat: {
         width: 500,

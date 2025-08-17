@@ -1,7 +1,7 @@
 {
-  "name": "opencluely",
+  "name": "jarvix",
   "version": "1.0.0",
-  "description": "AI Problem Solving Assistant",
+  "description": "JARVIX - AI Problem Solving Assistant",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -41,8 +41,8 @@
     "electron-builder": "^24.13.3"
   },
   "build": {
-    "appId": "com.opencluely.app",
-    "productName": "OpenCluely",
+    "appId": "com.jarvix.app",
+    "productName": "JARVIX",
     "directories": {
       "output": "dist"
     },
@@ -131,7 +131,7 @@
       "createStartMenuShortcut": true
     },
     "dmg": {
-      "title": "OpenCluely Interview Assistant",
+      "title": "JARVIX AI Assistant",
       "backgroundColor": "#000000",
       "window": {
         "width": 600,

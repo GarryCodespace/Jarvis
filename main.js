@@ -24,7 +24,7 @@ class ApplicationController {
 
     // Window configurations for reference
     this.windowConfigs = {
-      main: { title: "OpenCluely" },
+      main: { title: "JARVIX" },
       chat: { title: "Chat" },
       llmResponse: { title: "AI Response" },
       settings: { title: "Settings" },
@@ -446,8 +446,8 @@ class ApplicationController {
           try {
             // Process each file
             for (const file of files) {
-              if (file.type && file.type.startsWith('image/')) {
-                // For images, use the image processing capability
+              if (file.type && (file.type.startsWith('image/') || file.type === 'application/pdf' || file.type.includes('document') || file.type.includes('word') || file.name.endsWith('.docx') || file.name.endsWith('.doc'))) {
+                // For images, PDFs, and documents, attempt visual processing (will handle errors gracefully)
                 try {
                   const sessionHistory = sessionManager.getOptimizedHistory();
                   const skillsRequiringProgrammingLanguage = ['dsa'];
@@ -495,8 +495,42 @@ class ApplicationController {
                   // Send error response
                   const chatGPTWindow = windowManager.getWindow('chatgpt');
                   if (chatGPTWindow && !chatGPTWindow.isDestroyed()) {
+                    const isImageFile = file.type && file.type.startsWith('image/');
+                    const isPdfFile = file.type === 'application/pdf';
+                    const isDocFile = file.type && (file.type.includes('document') || file.type.includes('word') || file.name.endsWith('.docx') || file.name.endsWith('.doc'));
+                    
+                    let errorMessage;
+                    if (isPdfFile) {
+                      errorMessage = `I can see you've uploaded a PDF file "${file.name}". While I have advanced analysis capabilities, I need the PDF to be converted to images or have its text extracted for me to analyze the content effectively. 
+
+For best results with PDFs, try:
+1. Taking screenshots of the PDF pages and uploading those as images
+2. Converting the PDF to images first
+3. Copy-pasting the text content from the PDF into our chat
+
+I apologize for this limitation and appreciate your understanding.`;
+                    } else if (isDocFile) {
+                      errorMessage = `I can see you've uploaded a Word document "${file.name}". While I have advanced analysis capabilities, I cannot directly process Word documents through the visual interface.
+
+For best results with Word documents, try:
+1. Copy-pasting the text content from the document into our chat
+2. Converting the document to images/screenshots and uploading those
+3. Saving as a plain text file and uploading that instead
+
+I'd be happy to analyze the content once you provide it in a supported format!`;
+                    } else {
+                      errorMessage = `I can see you've uploaded "${file.name}". While I have advanced analysis capabilities, I can only directly process image files (PNG, JPG, etc.) through my visual interface.
+
+For best results, try:
+1. Copy-pasting text content directly into our chat
+2. Converting documents to images/screenshots
+3. Using supported image formats (PNG, JPG, GIF, etc.)
+
+I'd be happy to help analyze your content once it's in a supported format!`;
+                    }
+                    
                     chatGPTWindow.webContents.send('llm-response', {
-                      response: `I apologize, but I encountered an error processing the image "${file.name}". Please try uploading the image again.`,
+                      response: errorMessage,
                       metadata: { processingTime: 0, usedFallback: true }
                     });
                   }

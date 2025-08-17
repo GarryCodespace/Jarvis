@@ -168,7 +168,7 @@ class ChatGPTWindowUI {
     messageDiv.innerHTML = `
       <div class="message-avatar">${avatar}</div>
       <div class="message-content">
-        <div class="message-text">${this.formatMessageContent(content)}</div>
+        <div class="message-text"></div>
         <div class="message-actions">
           <button class="message-action-btn" onclick="chatUI.copyMessage(this)">
             <i class="fas fa-copy"></i>
@@ -194,7 +194,44 @@ class ChatGPTWindowUI {
       });
     }
     
+    // Add typewriter effect for assistant messages
+    if (role === 'assistant') {
+      this.typewriterEffect(messageDiv.querySelector('.message-text'), content);
+    } else {
+      // For user messages, show immediately
+      messageDiv.querySelector('.message-text').innerHTML = this.formatMessageContent(content);
+    }
+    
     this.scrollToBottom();
+  }
+
+  // Typewriter effect for assistant responses
+  typewriterEffect(element, content, speed = 5, charsPerFrame = 2) {
+    const formattedContent = this.formatMessageContent(content);
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = formattedContent;
+    const plainText = tempDiv.textContent || tempDiv.innerText || '';
+    
+    let index = 0;
+    element.innerHTML = '';
+    
+    const typeNextChars = () => {
+      if (index < plainText.length) {
+        // Add multiple characters at once for faster typing
+        for (let i = 0; i < charsPerFrame && index < plainText.length; i++) {
+          element.textContent += plainText.charAt(index);
+          index++;
+        }
+        this.scrollToBottom();
+        setTimeout(typeNextChars, speed);
+      } else {
+        // Once typing is complete, set the full formatted content
+        element.innerHTML = formattedContent;
+        this.scrollToBottom();
+      }
+    };
+    
+    typeNextChars();
   }
 
   // Message handling
