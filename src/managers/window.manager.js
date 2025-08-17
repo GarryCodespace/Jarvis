@@ -6,9 +6,9 @@ const config = require('../core/config');
 class WindowManager {
   constructor() {
     this.windows = new Map();
-    this.activeWindow = 'main';
+    this.activeWindow = 'chatgpt';
     this.isInteractive = true; // default to interactive so windows are clickable/drag-able
-    this.isVisible = false;
+    this.isVisible = true;
     this.currentDisplay = null;
     this.screenWatcher = null;
     this.desktopWatcher = null;
@@ -43,6 +43,13 @@ class WindowManager {
         height: 700,
         file: 'chat.html',
         title: 'Chat'
+      },
+      chatgpt: {
+        width: 400,
+        height: 600,
+        file: 'chat-gpt.html',
+        title: 'J.A.R.V.I.S',
+        alwaysOnTop: true
       },
       llmResponse: {
         width: 840,
@@ -87,8 +94,8 @@ class WindowManager {
     logger.info('Initializing application windows');
     
     try {
-      await this.createMainWindow();
-      await this.createChatWindow();
+      // Only create ChatGPT window and essential support windows
+      await this.createChatGPTWindow();
       await this.createLLMResponseWindow();
       await this.createSettingsWindow();
       
@@ -98,6 +105,14 @@ class WindowManager {
 
       // Make windows interactive by default so they are not click-through
       this.setInteractive(true);
+      
+      // Show only ChatGPT window by default
+      const chatGPTWindow = this.windows.get('chatgpt');
+      
+      if (chatGPTWindow) {
+        this.showOnCurrentDesktop(chatGPTWindow);
+        this.activeWindow = 'chatgpt';
+      }
       
       this.isInitialized = true;
       this.isInitializing = false;
@@ -161,6 +176,16 @@ class WindowManager {
     const window = await this.createWindow('chat');
     this.windows.set('chat', window);
     window.hide();
+    return window;
+  }
+
+  async createChatGPTWindow() {
+    if (this.windows.has('chatgpt')) {
+      return this.windows.get('chatgpt');
+    }
+    const window = await this.createWindow('chatgpt');
+    this.windows.set('chatgpt', window);
+    // Keep ChatGPT window visible as default
     return window;
   }
 
@@ -281,6 +306,30 @@ class WindowManager {
         closable: false,
         hasShadow: false,
         thickFrame: false,
+        ...(process.platform === 'darwin' && {
+          titleBarStyle: 'hiddenInset',
+          trafficLightPosition: { x: -100, y: -100 },
+          type: 'panel',
+          acceptFirstMouse: true
+        }),
+        level: process.platform === 'darwin' ? 'floating' : undefined,
+      };
+    } else if (type === 'chatgpt') {
+      // ChatGPT-style window - compact, resizable, frameless
+      browserWindowOptions = {
+        ...baseOptions,
+        minWidth: 350,
+        minHeight: 500,
+        maxWidth: 600,
+        maxHeight: 800,
+        frame: false,
+        titleBarStyle: 'hidden',
+        transparent: true,
+        resizable: true,
+        minimizable: false,
+        maximizable: false,
+        closable: false,
+        hasShadow: true,
         ...(process.platform === 'darwin' && {
           titleBarStyle: 'hiddenInset',
           trafficLightPosition: { x: -100, y: -100 },
@@ -591,6 +640,7 @@ class WindowManager {
     const positions = {
       main: { x: displayX + 50, y: displayY + topMargin },
       chat: { x: displayX + screenWidth - windowWidth - 50, y: displayY + topMargin },
+      chatgpt: { x: displayX + screenWidth - windowWidth - 20, y: displayY + topMargin },
       llmResponse: { x: displayX + (screenWidth - windowWidth) / 2, y: displayY + topMargin },
       settings: { x: displayX + (screenWidth - windowWidth) / 2, y: displayY + topMargin }
     };
@@ -876,6 +926,19 @@ class WindowManager {
   }
 
   switchToWindow(windowType) {
+    // Handle special case for chatgpt window
+    if (windowType === 'chatgpt') {
+      const chatGPTWindow = this.windows.get('chatgpt');
+      if (chatGPTWindow && chatGPTWindow.isVisible()) {
+        chatGPTWindow.hide();
+        return;
+      } else {
+        this.showChatGPTWindow();
+        this.activeWindow = windowType;
+        return;
+      }
+    }
+
     if (this.windows.has('chat') && this.windows.get('chat').isVisible()) {
       this.hideChatWindow();
       return;
@@ -908,19 +971,24 @@ class WindowManager {
       return;
     }
 
+    // Only show ChatGPT window by default, hide others
+    const chatGPTWindow = this.windows.get('chatgpt');
+    if (chatGPTWindow) {
+      this.showOnCurrentDesktop(chatGPTWindow);
+      chatGPTWindow.focus();
+    }
+    
+    // Hide other windows
     this.windows.forEach((window, type) => {
-      if (type !== 'llmResponse') { // Don't show LLM response unless it has content
-        this.showOnCurrentDesktop(window);
+      if (type !== 'chatgpt' && type !== 'llmResponse') {
+        window.hide();
       }
     });
     
     this.isVisible = true;
-    const activeWindow = this.windows.get(this.activeWindow);
-    if (activeWindow) {
-      activeWindow.focus();
-    }
+    this.activeWindow = 'chatgpt';
     
-    logger.info('All windows shown on current desktop', { 
+    logger.info('ChatGPT window shown, others hidden', { 
       activeWindow: this.activeWindow,
       windowCount: this.windows.size 
     });
@@ -1593,6 +1661,14 @@ class WindowManager {
     if (chatWindow && !chatWindow.isDestroyed()) {
       this.showOnCurrentDesktop(chatWindow);
       logger.debug('Chat window shown');
+    }
+  }
+
+  showChatGPTWindow() {
+    const chatGPTWindow = this.windows.get('chatgpt');
+    if (chatGPTWindow && !chatGPTWindow.isDestroyed()) {
+      this.showOnCurrentDesktop(chatGPTWindow);
+      logger.debug('ChatGPT window shown');
     }
   }
 

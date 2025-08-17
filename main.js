@@ -118,9 +118,9 @@ class ApplicationController {
   setupGlobalShortcuts() {
     const shortcuts = {
       "CommandOrControl+Shift+S": () => this.triggerScreenshotOCR(),
-      "CommandOrControl+Shift+V": () => windowManager.toggleVisibility(),
+      "CommandOrControl+Shift+K": () => windowManager.toggleVisibility(),
       "CommandOrControl+Shift+I": () => windowManager.toggleInteraction(),
-      "CommandOrControl+Shift+C": () => windowManager.switchToWindow("chat"),
+      "CommandOrControl+Shift+C": () => windowManager.switchToWindow("chatgpt"),
       "CommandOrControl+Shift+\\": () => this.clearSessionMemory(),
       "CommandOrControl+,": () => windowManager.showSettings(),
       "Alt+A": () => windowManager.toggleInteraction(),
@@ -352,16 +352,96 @@ class ApplicationController {
       sessionManager.addUserInput(text, 'chat');
       logger.debug('Chat message added to session memory', { textLength: text.length });
       
-      // Process typed message with LLM in the same way as transcribed text
+      // Process chat message with LLM and send to ChatGPT window specifically
       setTimeout(async () => {
         try {
           const sessionHistory = sessionManager.getOptimizedHistory();
-          await this.processTranscriptionWithLLM(text, sessionHistory);
+          // Use a simple general chat approach
+          let llmResult;
+          try {
+            // Try to use the LLM service directly without skills
+            logger.debug('Checking LLM service availability', { 
+              hasClient: !!llmService.client, 
+              hasModel: !!llmService.model,
+              isInitialized: llmService.isInitialized 
+            });
+            
+            if (llmService.client && llmService.model && llmService.isInitialized) {
+              logger.debug('Sending message to LLM', { messagePreview: text.substring(0, 50) });
+              try {
+                const result = await llmService.model.generateContent(`You are J.A.R.V.I.S, Tony Stark's AI assistant. You are intelligent, helpful, sophisticated, and have a slight British accent in your responses. Please respond helpfully to this message: ${text}`);
+                const response = result.response.text();
+                logger.debug('LLM response received', { responsePreview: response.substring(0, 100) });
+                
+                llmResult = {
+                  response: response,
+                  metadata: { processingTime: Date.now(), usedFallback: false }
+                };
+              } catch (primaryError) {
+                logger.warn('Primary LLM client failed, trying direct HTTP method', { error: primaryError.message });
+                // Try the direct HTTP fallback
+                const response = await llmService.generateContentDirect(`You are J.A.R.V.I.S, Tony Stark's AI assistant. You are intelligent, helpful, sophisticated, and have a slight British accent in your responses. Please respond helpfully to this message: ${text}`);
+                logger.debug('Direct LLM response received', { responsePreview: response.substring(0, 100) });
+                
+                llmResult = {
+                  response: response,
+                  metadata: { processingTime: Date.now(), usedFallback: true }
+                };
+              }
+            } else {
+              logger.warn('LLM service not properly initialized, trying direct method', {
+                hasClient: !!llmService.client,
+                hasModel: !!llmService.model,
+                isInitialized: llmService.isInitialized
+              });
+              // Try the direct HTTP method as fallback
+              const response = await llmService.generateContentDirect(`You are J.A.R.V.I.S, Tony Stark's AI assistant. You are intelligent, helpful, sophisticated, and have a slight British accent in your responses. Please respond helpfully to this message: ${text}`);
+              logger.debug('Direct LLM response received (no client)', { responsePreview: response.substring(0, 100) });
+              
+              llmResult = {
+                response: response,
+                metadata: { processingTime: Date.now(), usedFallback: true }
+              };
+            }
+          } catch (error) {
+            logger.error('LLM generation failed, using fallback', { error: error.message });
+            // Fallback response if LLM fails
+            llmResult = {
+              response: 'I\'m here and ready to help! Please ask me anything you\'d like assistance with.',
+              metadata: { processingTime: 0, usedFallback: true }
+            };
+          }
+
+          // Send response specifically to ChatGPT window only
+          const chatGPTWindow = windowManager.getWindow('chatgpt');
+          if (chatGPTWindow && !chatGPTWindow.isDestroyed()) {
+            chatGPTWindow.webContents.send('llm-response', {
+              response: llmResult.response,
+              metadata: llmResult.metadata
+            });
+          }
+
+          sessionManager.addModelResponse(llmResult.response, {
+            skill: 'general',
+            processingTime: llmResult.metadata.processingTime,
+            usedFallback: llmResult.metadata.usedFallback,
+            isChatResponse: true
+          });
+
         } catch (error) {
           logger.error("Failed to process chat message with LLM", {
             error: error.message,
             text: text.substring(0, 100)
           });
+          
+          // Send fallback response
+          const chatGPTWindow = windowManager.getWindow('chatgpt');
+          if (chatGPTWindow && !chatGPTWindow.isDestroyed()) {
+            chatGPTWindow.webContents.send('llm-response', {
+              response: 'I\'m here and ready to help! Please ask me anything you\'d like assistance with.',
+              metadata: { processingTime: 0, usedFallback: true }
+            });
+          }
         }
       }, 500);
       

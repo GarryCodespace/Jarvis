@@ -1,4 +1,5 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const https = require('https');
 const logger = require('../core/logger').createServiceLogger('LLM');
 const config = require('../core/config');
 const { promptLoader } = require('../../prompt-loader');
@@ -40,6 +41,64 @@ class LLMService {
         error: error.message 
       });
     }
+  }
+
+  /**
+   * Direct HTTP fallback method for when the GoogleGenerativeAI client fails
+   */
+  async generateContentDirect(prompt) {
+    const apiKey = config.getApiKey('GEMINI');
+    
+    if (!apiKey) {
+      throw new Error('Gemini API key not configured');
+    }
+
+    return new Promise((resolve, reject) => {
+      const postData = JSON.stringify({
+        contents: [{
+          parts: [{ text: prompt }]
+        }]
+      });
+
+      const options = {
+        hostname: 'generativelanguage.googleapis.com',
+        port: 443,
+        path: `/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData)
+        }
+      };
+
+      const req = https.request(options, (res) => {
+        let data = '';
+
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
+
+        res.on('end', () => {
+          try {
+            const response = JSON.parse(data);
+            if (response.candidates && response.candidates[0] && response.candidates[0].content) {
+              resolve(response.candidates[0].content.parts[0].text);
+            } else {
+              reject(new Error('Invalid response format from API'));
+            }
+          } catch (error) {
+            reject(new Error('Failed to parse API response: ' + error.message));
+          }
+        });
+      });
+
+      req.on('error', (error) => {
+        reject(error);
+      });
+
+      req.write(postData);
+      req.end();
+    });
   }
 
   /**
