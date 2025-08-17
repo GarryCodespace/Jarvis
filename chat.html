@@ -64,10 +64,16 @@
         align-items: center;
         gap: 8px;
       }
+      .header-left-actions {
+        -webkit-app-region: no-drag;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
       .icon-button {
         background: rgba(255, 255, 255, 0.12);
         border: 1px solid rgba(255, 255, 255, 0.18);
-        color: rgba(255, 255, 255, 0.9);
+        color: rgba(255, 255, 255, 1);
         border-radius: 6px;
         padding: 6px 10px;
         cursor: pointer;
@@ -163,8 +169,8 @@
         background: rgba(255, 152, 0, 0.1);
       }
       .message.assistant {
-        background: rgba(156, 39, 176, 0.1);
-        border-left: 3px solid #9c27b0;
+        background: rgba(0, 212, 255, 0.1);
+        border-left: 3px solid #00d4ff;
         /* Removed all height restrictions and overflow hidden */
         display: block;
       }
@@ -228,7 +234,7 @@
         position: absolute;
         left: 0;
         font-weight: 500;
-        color: rgba(156, 39, 176, 0.8);
+        color: rgba(0, 212, 255, 0.8);
       }
       
       .message.assistant {
@@ -339,7 +345,7 @@
       
       /* Ensure blockquotes are fully visible */
       .message.assistant blockquote {
-        border-left: 3px solid rgba(156, 39, 176, 0.5);
+        border-left: 3px solid rgba(0, 212, 255, 0.5);
         padding-left: 12px;
         margin: 8px 0;
         font-style: italic;
@@ -422,6 +428,79 @@
         padding: 8px 12px;
         border: 1px solid rgba(255, 255, 255, 0.15);
         -webkit-app-region: no-drag;
+      }
+      
+      .file-upload-button {
+        background: rgba(255, 255, 255, 0.15);
+        border: none;
+        border-radius: 6px;
+        width: 32px;
+        height: 32px;
+        color: rgba(255, 255, 255, 1);
+        cursor: pointer;
+        transition: all 0.2s;
+        -webkit-app-region: no-drag;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+      }
+      
+      .file-upload-button:hover {
+        background: rgba(255, 255, 255, 0.25);
+        color: rgba(255, 255, 255, 1);
+      }
+      
+      #fileInput {
+        display: none;
+      }
+      
+      .file-preview {
+        display: none;
+        margin-top: 8px;
+        padding: 8px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+      }
+      
+      .file-preview.active {
+        display: block;
+      }
+      
+      .file-preview-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 12px;
+      }
+      
+      .file-preview-item:last-child {
+        margin-bottom: 0;
+      }
+      
+      .file-preview-image {
+        max-width: 100px;
+        max-height: 100px;
+        border-radius: 4px;
+        object-fit: cover;
+      }
+      
+      .file-remove-button {
+        background: rgba(244, 67, 54, 0.8);
+        border: none;
+        border-radius: 4px;
+        color: white;
+        padding: 2px 6px;
+        font-size: 10px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      
+      .file-remove-button:hover {
+        background: rgba(244, 67, 54, 1);
       }
       .input-field {
         flex: 1;
@@ -670,9 +749,14 @@
   <body>
     <div class="chat-container" id="chatContainer">
       <div class="chat-header">
+        <div class="header-left-actions">
+          <button class="icon-button" id="minimizeBtn" title="Minimize window">
+            <i class="fas fa-minus"></i>
+          </button>
+        </div>
         <div class="header-title">
-          <i class="fas fa-microphone"></i>
-          Live Transcription & Chat
+          <i class="fas fa-robot" style="color: #00d4ff; text-shadow: 0 0 10px rgba(0, 212, 255, 0.5);"></i>
+          JARVIX - Live Assistant
           <div class="recording-indicator" id="recordingIndicator"></div>
         </div>
         <div class="header-actions">
@@ -688,7 +772,12 @@
       <div class="chat-messages" id="chatMessages"></div>
 
       <div class="chat-input">
+        <div class="file-preview" id="filePreview"></div>
         <div class="input-container">
+          <input type="file" id="fileInput" accept="image/*,.pdf,.txt,.doc,.docx" multiple>
+          <button class="file-upload-button" id="fileUploadButton" title="Upload files">
+            <i class="fas fa-plus"></i>
+          </button>
           <textarea
             class="input-field"
             placeholder="Type a message… (Shift+Enter for newline)"
@@ -726,12 +815,16 @@
       const listeningDuration = document.getElementById('listeningDuration');
       const interimOverlay = document.getElementById('interimOverlay');
       const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+      const fileUploadButton = document.getElementById('fileUploadButton');
+      const fileInput = document.getElementById('fileInput');
+      const filePreview = document.getElementById('filePreview');
 
       let isRecording = false;
       let isInteractive = true;
       let listeningStartTime = null;
       let listeningTimer = null;
       let speechAvailable = false;
+      let selectedFiles = [];
 
       // Chat persistence and deduplication
       const CHAT_HISTORY_KEY = 'opencluely_chat_history_v1';
@@ -1206,6 +1299,16 @@
         clearHistoryBtn.addEventListener('click', () => clearChatHistory());
       }
 
+      // Add minimize button functionality
+      const minimizeBtn = document.getElementById('minimizeBtn');
+      if (minimizeBtn) {
+        minimizeBtn.addEventListener('click', () => {
+          if (whysperAPI && whysperAPI.minimizeWindow) {
+            whysperAPI.minimizeWindow();
+          }
+        });
+      }
+
       if (micButton) {
         micButton.addEventListener('click', async () => {
           if (!isInteractive) {
@@ -1235,25 +1338,7 @@
 
       if (sendButton) {
         sendButton.addEventListener('click', async () => {
-          const text = messageInput.value.trim();
-          if (text) {
-            addMessage(text, 'user');
-            messageInput.value = '';
-            
-            // Show thinking indicator after user message
-            setTimeout(() => {
-              showThinkingIndicator();
-            }, 300);
-            
-            // Send to main process for session memory storage and LLM processing
-            try {
-              if (whysperAPI && whysperAPI.sendChatMessage) {
-                await whysperAPI.sendChatMessage(text);
-              }
-            } catch (error) {
-              console.error('Failed to send chat message to main process:', error);
-            }
-          }
+          await sendMessageWithFiles();
         });
       }
 
@@ -1274,22 +1359,36 @@
         messageInput.addEventListener('keydown', async (e) => {
           if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            const text = messageInput.value.trim();
-            if (text) {
-              addMessage(text, 'user');
-              messageInput.value = '';
-              autoGrow(messageInput);
-              setTimeout(() => { showThinkingIndicator(); }, 300);
-              try {
-                if (whysperAPI && whysperAPI.sendChatMessage) {
-                  await whysperAPI.sendChatMessage(text);
-                }
-              } catch (error) {
-                console.error('Failed to send chat message to main process:', error);
-              }
-            }
+            await sendMessageWithFiles();
           }
           // If Shift+Enter, allow default to insert newline
+        });
+        
+        messageInput.addEventListener('paste', (e) => {
+          console.log('[Chat] Paste event detected');
+          const clipboardData = e.clipboardData || window.clipboardData;
+          const items = clipboardData.items;
+          
+          for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            
+            // Check if the item is an image
+            if (item.type.indexOf('image') !== -1) {
+              e.preventDefault(); // Prevent default paste behavior for images
+              
+              const file = item.getAsFile();
+              if (file) {
+                console.log('[Chat] Image pasted:', file.name, file.type, file.size);
+                
+                // Add to selected files array
+                selectedFiles.push(file);
+                updateFilePreview();
+                
+                console.log('[Chat] Image attachment added from paste');
+              }
+              break; // Only handle the first image
+            }
+          }
         });
       }
 
@@ -1301,6 +1400,145 @@
           micButton && micButton.click();
         }
       });
+
+      // File handling functions
+      function handleFileUpload() {
+        fileInput.click();
+      }
+
+      function handleFileSelection(event) {
+        const files = Array.from(event.target.files);
+        files.forEach(file => {
+          if (isValidFile(file)) {
+            selectedFiles.push(file);
+            addFileToPreview(file);
+          }
+        });
+        updateFilePreview();
+        event.target.value = ''; // Reset input
+      }
+
+      function isValidFile(file) {
+        const maxSize = 10 * 1024 * 1024; // 10MB
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 'text/plain'];
+        
+        if (file.size > maxSize) {
+          addMessage(`File "${file.name}" is too large. Maximum size is 10MB.`, 'error');
+          return false;
+        }
+        
+        if (!allowedTypes.includes(file.type) && !file.name.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp|pdf|txt)$/)) {
+          addMessage(`File type "${file.type}" is not supported.`, 'error');
+          return false;
+        }
+        
+        return true;
+      }
+
+      function addFileToPreview(file) {
+        const fileItem = document.createElement('div');
+        fileItem.className = 'file-preview-item';
+        fileItem.dataset.fileName = file.name;
+
+        if (file.type.startsWith('image/')) {
+          const img = document.createElement('img');
+          img.className = 'file-preview-image';
+          img.src = URL.createObjectURL(file);
+          img.onload = () => URL.revokeObjectURL(img.src);
+          fileItem.appendChild(img);
+        } else {
+          const icon = document.createElement('i');
+          icon.className = file.type === 'application/pdf' ? 'fas fa-file-pdf' : 'fas fa-file-text';
+          fileItem.appendChild(icon);
+        }
+
+        const fileName = document.createElement('span');
+        fileName.textContent = file.name;
+        fileItem.appendChild(fileName);
+
+        const removeButton = document.createElement('button');
+        removeButton.className = 'file-remove-button';
+        removeButton.textContent = 'Remove';
+        removeButton.onclick = () => removeFile(file.name);
+        fileItem.appendChild(removeButton);
+
+        filePreview.appendChild(fileItem);
+      }
+
+      function removeFile(fileName) {
+        selectedFiles = selectedFiles.filter(file => file.name !== fileName);
+        const fileItem = filePreview.querySelector(`[data-file-name="${fileName}"]`);
+        if (fileItem) {
+          fileItem.remove();
+        }
+        updateFilePreview();
+      }
+
+      function updateFilePreview() {
+        if (selectedFiles.length > 0) {
+          filePreview.classList.add('active');
+        } else {
+          filePreview.classList.remove('active');
+        }
+      }
+
+      async function sendMessageWithFiles() {
+        const text = messageInput.value.trim();
+        
+        if (!text && selectedFiles.length === 0) {
+          return;
+        }
+
+        // Add user message
+        if (text) {
+          addMessage(text, 'user');
+        }
+
+        // Add file messages
+        if (selectedFiles.length > 0) {
+          selectedFiles.forEach(file => {
+            if (file.type.startsWith('image/')) {
+              addMessage(`📎 Image: ${file.name}`, 'user');
+            } else {
+              addMessage(`📎 File: ${file.name}`, 'user');
+            }
+          });
+        }
+
+        messageInput.value = '';
+        autoGrow(messageInput);
+        
+        // Show thinking indicator
+        setTimeout(() => {
+          showThinkingIndicator();
+        }, 300);
+
+        // Send to main process with files
+        try {
+          if (whysperAPI && whysperAPI.sendChatMessageWithFiles) {
+            await whysperAPI.sendChatMessageWithFiles(text, selectedFiles);
+          } else if (whysperAPI && whysperAPI.sendChatMessage) {
+            // Fallback for now - just send text
+            await whysperAPI.sendChatMessage(text || 'Analyzing uploaded files...');
+          }
+        } catch (error) {
+          console.error('Failed to send message with files:', error);
+        }
+
+        // Clear files
+        selectedFiles = [];
+        filePreview.innerHTML = '';
+        updateFilePreview();
+      }
+
+      // Event listeners for file upload
+      if (fileUploadButton) {
+        fileUploadButton.addEventListener('click', handleFileUpload);
+      }
+
+      if (fileInput) {
+        fileInput.addEventListener('change', handleFileSelection);
+      }
 
       // Initialize
       if (!chatHistory || chatHistory.length === 0) {

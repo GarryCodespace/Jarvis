@@ -48,7 +48,7 @@ class WindowManager {
         width: 400,
         height: 600,
         file: 'chat-gpt.html',
-        title: 'J.A.R.V.I.S',
+        title: 'J.A.R.V.I.X',
         alwaysOnTop: true
       },
       llmResponse: {

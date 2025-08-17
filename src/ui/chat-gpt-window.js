@@ -17,7 +17,7 @@ class ChatGPTWindowUI {
     this.updateChatTitle();
     
     // Add a welcome message
-    this.addMessage('assistant', 'Good day, sir. I\'m J.A.R.V.I.S, your AI assistant. I can help you with a wide variety of tasks including answering questions, writing, coding, analysis, and creative projects. How may I assist you today?');
+    this.addMessage('assistant', 'Good day, sir. I\'m J.A.R.V.I.X, your AI assistant. I can help you with a wide variety of tasks including answering questions, writing, coding, analysis, and creative projects. How may I assist you today?');
     
     console.log('[ChatGPT] Window initialized');
   }
@@ -78,6 +78,7 @@ class ChatGPTWindowUI {
     if (this.composerInput) {
       this.composerInput.addEventListener('input', () => this.autoResizeComposer());
       this.composerInput.addEventListener('keydown', (e) => this.handleComposerKeydown(e));
+      this.composerInput.addEventListener('paste', (e) => this.handlePaste(e));
     }
     
     if (this.sendBtn) {
@@ -138,7 +139,7 @@ class ChatGPTWindowUI {
   clearChat() {
     this.messages = [];
     this.chatMessages.innerHTML = '';
-    this.addMessage('assistant', 'Good day, sir. I\'m J.A.R.V.I.S, your AI assistant. I can help you with a wide variety of tasks including answering questions, writing, coding, analysis, and creative projects. How may I assist you today?');
+    this.addMessage('assistant', 'Good day, sir. I\'m J.A.R.V.I.X, your AI assistant. I can help you with a wide variety of tasks including answering questions, writing, coding, analysis, and creative projects. How may I assist you today?');
   }
 
   // Rendering
@@ -204,8 +205,8 @@ class ChatGPTWindowUI {
     console.log('[ChatGPT] Is streaming:', this.isStreaming);
     console.log('[ChatGPT] Attached files:', this.attachedFiles.length);
     
-    if ((!content && this.attachedFiles.length === 0) || this.isStreaming) {
-      console.log('[ChatGPT] Aborting send: empty content/attachments or already streaming');
+    if (!content && this.attachedFiles.length === 0) {
+      console.log('[ChatGPT] Aborting send: empty content/attachments');
       return;
     }
     
@@ -224,9 +225,6 @@ class ChatGPTWindowUI {
     // Start streaming response
     this.startStreaming();
     this.sendToLLM(content);
-    
-    // Clear attachments after sending
-    this.clearAttachments();
   }
 
   addMessage(role, content) {
@@ -243,10 +241,29 @@ class ChatGPTWindowUI {
   async sendToLLM(content) {
     try {
       console.log('[ChatGPT] Sending to LLM:', content);
+      console.log('[ChatGPT] Attached files:', this.attachedFiles.length);
       console.log('[ChatGPT] ElectronAPI available:', !!window.electronAPI);
       console.log('[ChatGPT] sendChatMessage function available:', !!(window.electronAPI && window.electronAPI.sendChatMessage));
       
-      if (window.electronAPI && window.electronAPI.sendChatMessage) {
+      if (this.attachedFiles.length > 0 && window.electronAPI && window.electronAPI.sendChatMessageWithFiles) {
+        console.log('[ChatGPT] Converting files for IPC...');
+        
+        // Convert files to serializable format
+        const serializedFiles = await Promise.all(
+          this.attachedFiles.map(async (attachment) => {
+            const arrayBuffer = await attachment.file.arrayBuffer();
+            return {
+              name: attachment.name,
+              type: attachment.type,
+              size: attachment.size,
+              data: Array.from(new Uint8Array(arrayBuffer))
+            };
+          })
+        );
+        
+        console.log('[ChatGPT] Calling electronAPI.sendChatMessageWithFiles with serialized files');
+        await window.electronAPI.sendChatMessageWithFiles(content, serializedFiles);
+      } else if (window.electronAPI && window.electronAPI.sendChatMessage) {
         console.log('[ChatGPT] Calling electronAPI.sendChatMessage');
         await window.electronAPI.sendChatMessage(content);
       } else {
@@ -255,10 +272,15 @@ class ChatGPTWindowUI {
         this.stopStreaming();
         this.addMessage('assistant', `Echo: ${content}\n\nI'm here and ready to help! Please ask me anything you'd like assistance with.`);
       }
+      
+      // Clear attachments after sending
+      this.clearAttachments();
     } catch (error) {
       console.error('[ChatGPT] Failed to send message:', error);
       this.stopStreaming();
       this.addMessage('assistant', `Error occurred while sending message: ${error.message}\n\nI'm here and ready to help! Please ask me anything you'd like assistance with.`);
+      // Clear attachments even on error
+      this.clearAttachments();
     }
   }
 
@@ -281,7 +303,7 @@ class ChatGPTWindowUI {
     this.isStreaming = true;
     this.sendBtn.style.display = 'none';
     this.stopBtn.style.display = 'flex';
-    this.composerInput.disabled = true;
+    // Keep input enabled so user can continue typing
     
     // Add typing indicator
     this.addTypingIndicator();
@@ -291,7 +313,7 @@ class ChatGPTWindowUI {
     this.isStreaming = false;
     this.sendBtn.style.display = 'flex';
     this.stopBtn.style.display = 'none';
-    this.composerInput.disabled = false;
+    // Input stays enabled for continuous typing
     
     // Remove typing indicator
     this.removeTypingIndicator();
@@ -407,6 +429,42 @@ class ChatGPTWindowUI {
     }
   }
 
+  handlePaste(e) {
+    console.log('[ChatGPT] Paste event detected');
+    const clipboardData = e.clipboardData || window.clipboardData;
+    const items = clipboardData.items;
+    
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      
+      // Check if the item is an image
+      if (item.type.indexOf('image') !== -1) {
+        e.preventDefault(); // Prevent default paste behavior for images
+        
+        const file = item.getAsFile();
+        if (file) {
+          console.log('[ChatGPT] Image pasted:', file.name, file.type, file.size);
+          
+          // Create a mock attachment object similar to file upload
+          const attachment = {
+            id: Date.now() + Math.random(),
+            file: file,
+            name: file.name || `pasted-image-${Date.now()}.png`,
+            type: file.type,
+            size: file.size
+          };
+          
+          // Add to attachments
+          this.attachedFiles.push(attachment);
+          this.updateAttachmentPreview();
+          
+          console.log('[ChatGPT] Image attachment added from paste');
+        }
+        break; // Only handle the first image
+      }
+    }
+  }
+
   handleGlobalKeydown(e) {
     // Esc for click-through mode
     if (e.key === 'Escape') {
@@ -449,7 +507,7 @@ class ChatGPTWindowUI {
   }
 
   updateChatTitle() {
-    this.chatTitle.textContent = 'J.A.R.V.I.S';
+    this.chatTitle.textContent = 'J.A.R.V.I.X';
   }
 
   scrollToBottom() {

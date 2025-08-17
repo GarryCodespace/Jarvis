@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resizeWindow: (width, height) => ipcRenderer.invoke('resize-window', { width, height }),
   moveWindow: (deltaX, deltaY) => ipcRenderer.invoke('move-window', { deltaX, deltaY }),
   getWindowStats: () => ipcRenderer.invoke('get-window-stats'),
+  minimizeWindow: () => ipcRenderer.invoke('minimize-window'),
   
   // Session memory
   getSessionHistory: () => ipcRenderer.invoke('get-session-history'),
@@ -28,12 +29,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearSessionMemory: () => ipcRenderer.invoke('clear-session-memory'),
   formatSessionHistory: () => ipcRenderer.invoke('format-session-history'),
   sendChatMessage: (text) => ipcRenderer.invoke('send-chat-message', text),
+  sendChatMessageWithFiles: (text, files) => ipcRenderer.invoke('send-chat-message-with-files', text, files),
   getSkillPrompt: (skillName) => ipcRenderer.invoke('get-skill-prompt', skillName),
   
-  // Gemini LLM configuration
-  setGeminiApiKey: (apiKey) => ipcRenderer.invoke('set-gemini-api-key', apiKey),
-  getGeminiStatus: () => ipcRenderer.invoke('get-gemini-status'),
-  testGeminiConnection: () => ipcRenderer.invoke('test-gemini-connection'),
+  // OpenAI LLM configuration
+  setOpenAIApiKey: (apiKey) => ipcRenderer.invoke('set-openai-api-key', apiKey),
+  getOpenAIStatus: () => ipcRenderer.invoke('get-openai-status'),
+  testOpenAIConnection: () => ipcRenderer.invoke('test-openai-connection'),
   
   // Settings
   showSettings: () => ipcRenderer.invoke('show-settings'),

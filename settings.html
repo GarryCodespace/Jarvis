@@ -63,6 +63,12 @@
             -webkit-app-region: no-drag;
         }
 
+        .header-left-actions {
+            display: flex;
+            gap: 8px;
+            -webkit-app-region: no-drag;
+        }
+
         .settings-content {
             flex: 1;
             padding: 20px;
@@ -259,6 +265,11 @@
 <body>
     <div class="settings-container">
         <div class="settings-header">
+            <div class="header-left-actions">
+                <button class="btn" id="minimizeButton" title="Minimize window">
+                    <i class="fas fa-minus"></i>
+                </button>
+            </div>
             <div class="header-title">
                 <i class="fas fa-cog"></i>
                 Settings
@@ -301,6 +312,7 @@
                             <div class="settings-item-description">Choose your current focus area</div>
                         </div>
                         <select class="input-field" id="activeSkill">
+                            <option value="general">General Assistant</option>
                             <option value="dsa">Data Structures & Algorithms</option>
                         </select>
                     </div>
@@ -325,6 +337,10 @@
                         <div class="icon-option" data-icon="settings">
                             <img src="./assests/icons/settings.png" alt="Settings">
                             <div>Settings</div>
+                        </div>
+                        <div class="icon-option" data-icon="jarvis">
+                            <i class="fas fa-robot" style="font-size: 24px; color: #00d4ff;"></i>
+                            <div>JARVIX</div>
                         </div>
                     </div>
                 </div>

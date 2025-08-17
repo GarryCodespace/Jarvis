@@ -136,6 +136,13 @@
         -webkit-app-region: no-drag;
       }
 
+      .chat-left-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        -webkit-app-region: no-drag;
+      }
+
       .provider-selector {
         background: rgba(255, 255, 255, 0.1);
         border: 1px solid rgba(255, 255, 255, 0.2);
@@ -214,7 +221,7 @@
       }
 
       .message.assistant .message-avatar {
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
         color: white;
       }
 
@@ -375,7 +382,7 @@
         background: transparent;
         border: none;
         border-radius: 50%;
-        color: rgba(255, 255, 255, 0.6);
+        color: rgba(255, 255, 255, 1);
         width: 32px;
         height: 32px;
         cursor: pointer;
@@ -530,9 +537,14 @@
       <!-- Main Chat Area -->
       <div class="main-chat">
         <div class="chat-header">
+          <div class="chat-left-controls">
+            <button class="composer-btn" onclick="window.electronAPI && window.electronAPI.minimizeWindow && window.electronAPI.minimizeWindow()" title="Minimize window">
+              <i class="fas fa-minus"></i>
+            </button>
+          </div>
           <h1 class="chat-title" id="chatTitle">
             <div class="jarvis-logo"></div>
-            J.A.R.V.I.S
+            J.A.R.V.I.X
           </h1>
           <div class="chat-controls">
             <button class="composer-btn" onclick="chatUI.clearChat()" title="Clear chat (Cmd/Ctrl+L)">

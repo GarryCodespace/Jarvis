@@ -8,7 +8,7 @@ const config = require("./src/core/config");
 // Screen capture (image-based)
 const captureService = require("./src/services/capture.service");
 const speechService = require("./src/services/speech.service");
-const llmService = require("./src/services/llm.service");
+const llmService = require("./src/services/openai.service");
 
 // Managers
 const windowManager = require("./src/managers/window.manager");
@@ -17,9 +17,9 @@ const sessionManager = require("./src/managers/session.manager");
 class ApplicationController {
   constructor() {
     this.isReady = false;
-    this.activeSkill = "dsa";
-  // Default to C++ so language is enforced from first run
-  this.codingLanguage = "cpp";
+    this.activeSkill = "general";
+  // Default programming language
+  this.codingLanguage = "javascript";
     this.speechAvailable = false;
 
     // Window configurations for reference
@@ -215,6 +215,9 @@ class ApplicationController {
     ipcMain.handle("copy-to-clipboard", (event, text) => {
       try {
         const { clipboard } = require("electron");
+        // Clear any existing clipboard content and formats
+        clipboard.clear();
+        // Write only plain text to ensure no formatting is preserved
         clipboard.writeText(String(text ?? ""));
         return true;
       } catch (e) {
@@ -366,42 +369,25 @@ class ApplicationController {
               isInitialized: llmService.isInitialized 
             });
             
-            if (llmService.client && llmService.model && llmService.isInitialized) {
-              logger.debug('Sending message to LLM', { messagePreview: text.substring(0, 50) });
+            if (llmService.isInitialized) {
+              logger.debug('Sending message to OpenAI', { messagePreview: text.substring(0, 50) });
               try {
-                const result = await llmService.model.generateContent(`You are J.A.R.V.I.S, Tony Stark's AI assistant. You are intelligent, helpful, sophisticated, and have a slight British accent in your responses. Please respond helpfully to this message: ${text}`);
-                const response = result.response.text();
-                logger.debug('LLM response received', { responsePreview: response.substring(0, 100) });
+                const response = await llmService.generateContentDirect(`You are J.A.R.V.I.X, Tony Stark's AI assistant. You are intelligent, helpful, sophisticated, and have a slight British accent in your responses. Please respond helpfully to this message: ${text}`);
+                logger.debug('OpenAI response received', { responsePreview: response.substring(0, 100) });
                 
                 llmResult = {
                   response: response,
                   metadata: { processingTime: Date.now(), usedFallback: false }
                 };
               } catch (primaryError) {
-                logger.warn('Primary LLM client failed, trying direct HTTP method', { error: primaryError.message });
-                // Try the direct HTTP fallback
-                const response = await llmService.generateContentDirect(`You are J.A.R.V.I.S, Tony Stark's AI assistant. You are intelligent, helpful, sophisticated, and have a slight British accent in your responses. Please respond helpfully to this message: ${text}`);
-                logger.debug('Direct LLM response received', { responsePreview: response.substring(0, 100) });
-                
-                llmResult = {
-                  response: response,
-                  metadata: { processingTime: Date.now(), usedFallback: true }
-                };
+                logger.warn('OpenAI request failed', { error: primaryError.message });
+                throw primaryError;
               }
             } else {
-              logger.warn('LLM service not properly initialized, trying direct method', {
-                hasClient: !!llmService.client,
-                hasModel: !!llmService.model,
+              logger.warn('OpenAI service not properly initialized', {
                 isInitialized: llmService.isInitialized
               });
-              // Try the direct HTTP method as fallback
-              const response = await llmService.generateContentDirect(`You are J.A.R.V.I.S, Tony Stark's AI assistant. You are intelligent, helpful, sophisticated, and have a slight British accent in your responses. Please respond helpfully to this message: ${text}`);
-              logger.debug('Direct LLM response received (no client)', { responsePreview: response.substring(0, 100) });
-              
-              llmResult = {
-                response: response,
-                metadata: { processingTime: Date.now(), usedFallback: true }
-              };
+              throw new Error('OpenAI service not initialized');
             }
           } catch (error) {
             logger.error('LLM generation failed, using fallback', { error: error.message });
@@ -448,6 +434,184 @@ class ApplicationController {
       return { success: true };
     });
 
+    ipcMain.handle("send-chat-message-with-files", async (event, text, files) => {
+      // Add chat message to session memory
+      const messageText = text || 'Analyzing uploaded files...';
+      sessionManager.addUserInput(messageText, 'chat');
+      logger.debug('Chat message with files added to session memory', { textLength: messageText.length, fileCount: files ? files.length : 0 });
+      
+      // Process files if provided
+      if (files && files.length > 0) {
+        setTimeout(async () => {
+          try {
+            // Process each file
+            for (const file of files) {
+              if (file.type && file.type.startsWith('image/')) {
+                // For images, use the image processing capability
+                try {
+                  const sessionHistory = sessionManager.getOptimizedHistory();
+                  const skillsRequiringProgrammingLanguage = ['dsa'];
+                  const needsProgrammingLanguage = skillsRequiringProgrammingLanguage.includes(this.activeSkill);
+                  
+                  // Convert file to buffer for processing
+                  let buffer;
+                  if (file.data && Array.isArray(file.data)) {
+                    // Handle serialized file data from frontend
+                    buffer = Buffer.from(file.data);
+                  } else if (file.arrayBuffer) {
+                    // Handle original File object
+                    const arrayBuffer = await file.arrayBuffer();
+                    buffer = Buffer.from(arrayBuffer);
+                  } else {
+                    throw new Error('Invalid file format');
+                  }
+                  
+                  const llmResult = await llmService.processImageWithSkill(
+                    buffer,
+                    file.type,
+                    this.activeSkill,
+                    sessionHistory.recent,
+                    needsProgrammingLanguage ? this.codingLanguage : null
+                  );
+
+                  // Send response to ChatGPT window
+                  const chatGPTWindow = windowManager.getWindow('chatgpt');
+                  if (chatGPTWindow && !chatGPTWindow.isDestroyed()) {
+                    chatGPTWindow.webContents.send('llm-response', {
+                      response: llmResult.response,
+                      metadata: llmResult.metadata
+                    });
+                  }
+
+                  sessionManager.addModelResponse(llmResult.response, {
+                    skill: this.activeSkill,
+                    processingTime: llmResult.metadata.processingTime,
+                    usedFallback: llmResult.metadata.usedFallback,
+                    isChatResponse: true,
+                    isImageAnalysis: true
+                  });
+                } catch (imageError) {
+                  logger.error('Failed to process image file', { error: imageError.message, fileName: file.name });
+                  // Send error response
+                  const chatGPTWindow = windowManager.getWindow('chatgpt');
+                  if (chatGPTWindow && !chatGPTWindow.isDestroyed()) {
+                    chatGPTWindow.webContents.send('llm-response', {
+                      response: `I apologize, but I encountered an error processing the image "${file.name}". Please try uploading the image again.`,
+                      metadata: { processingTime: 0, usedFallback: true }
+                    });
+                  }
+                }
+              } else {
+                // For non-image files, read content and process as text
+                try {
+                  let fileContent = '';
+                  if (file.type === 'text/plain') {
+                    let arrayBuffer;
+                    if (file.data && Array.isArray(file.data)) {
+                      // Handle serialized file data from frontend
+                      arrayBuffer = new Uint8Array(file.data).buffer;
+                    } else if (file.arrayBuffer) {
+                      // Handle original File object
+                      arrayBuffer = await file.arrayBuffer();
+                    } else {
+                      throw new Error('Invalid file format');
+                    }
+                    fileContent = new TextDecoder().decode(arrayBuffer);
+                  } else {
+                    fileContent = `[File: ${file.name}, Type: ${file.type}, Size: ${file.size} bytes]`;
+                  }
+                  
+                  const combinedText = text ? `${text}\n\nFile content:\n${fileContent}` : `Analyzing file: ${file.name}\n\n${fileContent}`;
+                  
+                  // Process with LLM
+                  const sessionHistory = sessionManager.getOptimizedHistory();
+                  const skillsRequiringProgrammingLanguage = ['dsa'];
+                  const needsProgrammingLanguage = skillsRequiringProgrammingLanguage.includes(this.activeSkill);
+                  
+                  const llmResult = await llmService.processTextWithSkill(
+                    combinedText,
+                    this.activeSkill,
+                    sessionHistory.recent,
+                    needsProgrammingLanguage ? this.codingLanguage : null
+                  );
+
+                  // Send response to ChatGPT window
+                  const chatGPTWindow = windowManager.getWindow('chatgpt');
+                  if (chatGPTWindow && !chatGPTWindow.isDestroyed()) {
+                    chatGPTWindow.webContents.send('llm-response', {
+                      response: llmResult.response,
+                      metadata: llmResult.metadata
+                    });
+                  }
+
+                  sessionManager.addModelResponse(llmResult.response, {
+                    skill: this.activeSkill,
+                    processingTime: llmResult.metadata.processingTime,
+                    usedFallback: llmResult.metadata.usedFallback,
+                    isChatResponse: true
+                  });
+                } catch (fileError) {
+                  logger.error('Failed to process file', { error: fileError.message, fileName: file.name });
+                  // Send error response
+                  const chatGPTWindow = windowManager.getWindow('chatgpt');
+                  if (chatGPTWindow && !chatGPTWindow.isDestroyed()) {
+                    chatGPTWindow.webContents.send('llm-response', {
+                      response: `I apologize, but I encountered an error processing the file "${file.name}". Please try uploading the file again.`,
+                      metadata: { processingTime: 0, usedFallback: true }
+                    });
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            logger.error("Failed to process files", {
+              error: error.message,
+              fileCount: files.length
+            });
+            
+            // Send fallback response
+            const chatGPTWindow = windowManager.getWindow('chatgpt');
+            if (chatGPTWindow && !chatGPTWindow.isDestroyed()) {
+              chatGPTWindow.webContents.send('llm-response', {
+                response: 'I\'m here and ready to help! However, I encountered an issue processing your files. Please try uploading them again.',
+                metadata: { processingTime: 0, usedFallback: true }
+              });
+            }
+          }
+        }, 500);
+      } else if (text) {
+        // If no files but text provided, process normally
+        setTimeout(async () => {
+          try {
+            const sessionHistory = sessionManager.getOptimizedHistory();
+            const response = await llmService.generateContentDirect(`You are J.A.R.V.I.X, Tony Stark's AI assistant. You are intelligent, helpful, sophisticated, and have a slight British accent in your responses. Please respond helpfully to this message: ${text}`);
+            
+            const chatGPTWindow = windowManager.getWindow('chatgpt');
+            if (chatGPTWindow && !chatGPTWindow.isDestroyed()) {
+              chatGPTWindow.webContents.send('llm-response', {
+                response: response,
+                metadata: { processingTime: Date.now(), usedFallback: false }
+              });
+            }
+
+            sessionManager.addModelResponse(response, {
+              skill: 'general',
+              processingTime: Date.now(),
+              usedFallback: false,
+              isChatResponse: true
+            });
+          } catch (error) {
+            logger.error("Failed to process text message", {
+              error: error.message,
+              text: text.substring(0, 100)
+            });
+          }
+        }, 500);
+      }
+      
+      return { success: true };
+    });
+
     ipcMain.handle("get-skill-prompt", (event, skillName) => {
       try {
         const { promptLoader } = require('./prompt-loader');
@@ -459,12 +623,12 @@ class ApplicationController {
       }
     });
 
-    ipcMain.handle("set-gemini-api-key", (event, apiKey) => {
+    ipcMain.handle("set-openai-api-key", (event, apiKey) => {
       llmService.updateApiKey(apiKey);
       return llmService.getStats();
     });
 
-    ipcMain.handle("get-gemini-status", () => {
+    ipcMain.handle("get-openai-status", () => {
       return llmService.getStats();
     });
 
@@ -494,18 +658,16 @@ class ApplicationController {
       return windowManager.getWindowBindingStatus();
     });
 
-    ipcMain.handle("test-gemini-connection", async () => {
+    ipcMain.handle("test-openai-connection", async () => {
       return await llmService.testConnection();
     });
 
-    ipcMain.handle("run-gemini-diagnostics", async () => {
+    ipcMain.handle("run-openai-diagnostics", async () => {
       try {
-        const connectivity = await llmService.checkNetworkConnectivity();
         const apiTest = await llmService.testConnection();
         
         return {
           success: true,
-          connectivity,
           apiTest,
           timestamp: new Date().toISOString()
         };
@@ -580,6 +742,20 @@ class ApplicationController {
       // Use the same expansion logic for now, can be enhanced later
       windowManager.expandLLMWindow(contentMetrics);
       return { success: true, contentMetrics };
+    });
+
+    ipcMain.handle("minimize-window", (event) => {
+      const webContents = event.sender;
+      const browserWindow = BrowserWindow.fromWebContents(webContents);
+      
+      if (browserWindow) {
+        browserWindow.minimize();
+        logger.debug("Window minimized via IPC");
+        return { success: true };
+      } else {
+        logger.warn("Could not find window to minimize");
+        return { success: false, error: "Window not found" };
+      }
     });
 
     ipcMain.handle("quit-app", () => {
@@ -1086,8 +1262,8 @@ class ApplicationController {
 
   getSettings() {
     return {
-      codingLanguage: this.codingLanguage || "cpp", // Default to C++
-      activeSkill: this.activeSkill || "dsa",
+      codingLanguage: this.codingLanguage || "javascript", // Default to JavaScript
+      activeSkill: this.activeSkill || "general",
       appIcon: this.appIcon || "terminal",
       selectedIcon: this.appIcon || "terminal",
       // pass through env-derived settings for UI convenience (masked)
@@ -1152,6 +1328,7 @@ class ApplicationController {
         terminal: "assests/icons/terminal.png",
         activity: "assests/icons/activity.png",
         settings: "assests/icons/settings.png",
+        jarvis: "assests/icons/activity.png", // Use activity icon as fallback for JARVIX
       };
 
       // App name mapping for stealth mode
@@ -1159,6 +1336,7 @@ class ApplicationController {
         terminal: "Terminal ",
         activity: "Activity Monitor ",
         settings: "System Settings ",
+        jarvis: "JARVIX ",
       };
 
       const iconPath = iconPaths[iconKey];

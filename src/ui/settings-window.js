@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Get DOM elements
     const closeButton = document.getElementById('closeButton');
     const quitButton = document.getElementById('quitButton');
+    const minimizeButton = document.getElementById('minimizeButton');
     const azureKeyInput = document.getElementById('azureKey');
     const azureRegionInput = document.getElementById('azureRegion');
     const geminiKeyInput = document.getElementById('geminiKey');
@@ -31,6 +32,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (closeButton) {
         closeButton.addEventListener('click', () => {
             window.api.send('close-settings');
+        });
+    }
+
+    // Minimize button handler
+    if (minimizeButton) {
+        minimizeButton.addEventListener('click', () => {
+            if (window.electronAPI && window.electronAPI.minimizeWindow) {
+                window.electronAPI.minimizeWindow();
+            }
         });
     }
 
