@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JARVIX - AI Assistant Download</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0d1117;
+            color: #e6edf3;
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Header */
+        .header {
+            background: rgba(13, 17, 23, 0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid #21262d;
+            padding: 1rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .nav {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #00d4ff;
+            text-decoration: none;
+        }
+
+        .logo-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(0, 212, 255, 0.8) 0%, rgba(0, 153, 204, 0.4) 50%, transparent 70%);
+            position: relative;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .logo-icon::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(0, 212, 255, 0.6);
+            border-radius: 50%;
+            border-top: 2px solid transparent;
+            border-right: 2px solid transparent;
+            animation: rotate 3s linear infinite;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: #e6edf3;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .nav-links a:hover {
+            color: #00d4ff;
+            background: rgba(0, 212, 255, 0.1);
+        }
+
+        .nav-links a.active {
+            color: #00d4ff;
+            background: rgba(0, 212, 255, 0.15);
+        }
+
+        @keyframes pulse {
+            0%, 100% { 
+                box-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
+                transform: scale(1);
+            }
+            50% { 
+                box-shadow: 0 0 20px rgba(0, 212, 255, 0.6);
+                transform: scale(1.05);
+            }
+        }
+
+        @keyframes rotate {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+
+        /* Main Content */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .hero {
+            text-align: center;
+            padding: 3rem 0;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            color: #7d8590;
+            margin-bottom: 2rem;
+        }
+
+        /* Download Section */
+        .download-section {
+            background: #161b22;
+            border: 1px solid #21262d;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .file-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #21262d;
+        }
+
+        .file-name {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #e6edf3;
+        }
+
+        .download-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            background: #1a7f37;
+            color: #7ce383;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .checksum-section {
+            margin-bottom: 2rem;
+            padding: 1rem;
+            background: #0d1117;
+            border: 1px solid #21262d;
+            border-radius: 8px;
+        }
+
+        .checksum-label {
+            font-size: 0.875rem;
+            color: #7d8590;
+            margin-bottom: 0.5rem;
+        }
+
+        .checksum-value {
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+            font-size: 0.875rem;
+            color: #e6edf3;
+            background: #21262d;
+            padding: 0.5rem;
+            border-radius: 6px;
+            word-break: break-all;
+            position: relative;
+        }
+
+        .copy-btn {
+            position: absolute;
+            right: 0.5rem;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #238636;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .copy-btn:hover {
+            background: #2ea043;
+        }
+
+        /* Downloads Grid */
+        .downloads-grid {
+            margin-top: 2rem;
+        }
+
+        .downloads-header {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #e6edf3;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .download-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem;
+            background: #161b22;
+            border: 1px solid #21262d;
+            border-radius: 8px;
+            margin-bottom: 0.75rem;
+            transition: all 0.3s ease;
+        }
+
+        .download-item:hover {
+            background: #1c2128;
+            border-color: #00d4ff;
+            transform: translateY(-1px);
+        }
+
+        .download-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .platform-icon {
+            font-size: 2rem;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 212, 255, 0.1);
+            border-radius: 8px;
+        }
+
+        .platform-details h3 {
+            font-size: 1.1rem;
+            color: #e6edf3;
+            margin-bottom: 0.25rem;
+        }
+
+        .platform-size {
+            font-size: 0.875rem;
+            color: #7d8590;
+        }
+
+        .download-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: #238636;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .download-btn:hover {
+            background: #2ea043;
+            transform: translateY(-1px);
+        }
+
+        .download-btn i {
+            font-size: 1rem;
+        }
+
+        /* System Requirements */
+        .requirements {
+            background: #161b22;
+            border: 1px solid #21262d;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-top: 2rem;
+        }
+
+        .requirements h2 {
+            color: #00d4ff;
+            margin-bottom: 1.5rem;
+            font-size: 1.5rem;
+        }
+
+        .req-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .req-platform {
+            background: #0d1117;
+            padding: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid #21262d;
+        }
+
+        .req-platform h3 {
+            color: #e6edf3;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .req-platform ul {
+            list-style: none;
+        }
+
+        .req-platform li {
+            color: #7d8590;
+            margin-bottom: 0.5rem;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+
+        .req-platform li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: #00d4ff;
+            font-weight: bold;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 2rem 0;
+            border-top: 1px solid #21262d;
+            margin-top: 3rem;
+            color: #7d8590;
+        }
+
+        .footer a {
+            color: #00d4ff;
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .nav {
+                padding: 0 1rem;
+            }
+            
+            .nav-links {
+                gap: 1rem;
+            }
+            
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+            
+            .container {
+                padding: 1rem;
+            }
+            
+            .download-item {
+                flex-direction: column;
+                gap: 1rem;
+                text-align: center;
+            }
+            
+            .req-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <header class="header">
+        <nav class="nav">
+            <a href="#" class="logo">
+                <div class="logo-icon"></div>
+                J.A.R.V.I.X
+            </a>
+            <ul class="nav-links">
+                <li><a href="#home">Home</a></li>
+                <li><a href="#download" class="active">Download</a></li>
+                <li><a href="#changelog">Changelog</a></li>
+                <li><a href="#docs">Docs</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="container">
+        <section class="hero">
+            <h1>JARVIX v1.0.0</h1>
+            <p>Your intelligent AI assistant for problem-solving, productivity, and creativity</p>
+            <div class="download-status">
+                <i class="fas fa-check-circle"></i>
+                File available on site
+            </div>
+        </section>
+
+        <section class="download-section">
+            <div class="file-header">
+                <h2 class="file-name">JARVIX-1.0.0-arm64-mac.zip</h2>
+                <div class="download-status">
+                    <i class="fas fa-download"></i>
+                    Available
+                </div>
+            </div>
+
+            <div class="checksum-section">
+                <div class="checksum-label">SHA-256:</div>
+                <div class="checksum-value">
+                    058d8fa9d75d4379e43a23600e3e15aeee35166ea5fae6cfbaa36034a9d10f96
+                    <button class="copy-btn" onclick="copyChecksum(this)">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="downloads-grid">
+                <h2 class="downloads-header">
+                    <i class="fas fa-download"></i>
+                    All Downloads
+                </h2>
+
+                <div class="download-item">
+                    <div class="download-info">
+                        <div class="platform-icon">🍎</div>
+                        <div class="platform-details">
+                            <h3>Apple Silicon (arm64)</h3>
+                            <p class="platform-size">134 MB</p>
+                        </div>
+                    </div>
+                    <a href="#" class="download-btn" onclick="downloadFile('JARVIX-1.0.0-arm64-mac.zip')">
+                        <i class="fas fa-download"></i>
+                        Download
+                    </a>
+                </div>
+
+                <div class="download-item">
+                    <div class="download-info">
+                        <div class="platform-icon">⚙️</div>
+                        <div class="platform-details">
+                            <h3>Intel (x64)</h3>
+                            <p class="platform-size">291 MB</p>
+                        </div>
+                    </div>
+                    <a href="#" class="download-btn" onclick="downloadFile('JARVIX-1.0.0-intel-mac.zip')">
+                        <i class="fas fa-download"></i>
+                        Download
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <section class="requirements">
+            <h2>System Requirements</h2>
+            <div class="req-grid">
+                <div class="req-platform">
+                    <h3>🍎 macOS</h3>
+                    <ul>
+                        <li>macOS 10.15 (Catalina) or later</li>
+                        <li>4 GB RAM minimum, 8 GB recommended</li>
+                        <li>500 MB free disk space</li>
+                        <li>Internet connection for AI features</li>
+                        <li>Apple Silicon or Intel processor</li>
+                    </ul>
+                </div>
+                <div class="req-platform">
+                    <h3>⚡ Performance</h3>
+                    <ul>
+                        <li>Optimized Electron architecture</li>
+                        <li>Low memory footprint</li>
+                        <li>Native macOS integration</li>
+                        <li>Hardware accelerated graphics</li>
+                        <li>Background processing support</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2024 JARVIX. Built with ❤️ by <a href="https://github.com/TechyCSR">@TechyCSR</a></p>
+    </footer>
+
+    <script>
+        function copyChecksum(button) {
+            const checksumText = button.parentElement.textContent.trim();
+            navigator.clipboard.writeText(checksumText).then(() => {
+                const originalHTML = button.innerHTML;
+                button.innerHTML = '<i class="fas fa-check"></i>';
+                button.style.background = '#2ea043';
+                
+                setTimeout(() => {
+                    button.innerHTML = originalHTML;
+                    button.style.background = '#238636';
+                }, 2000);
+            });
+        }
+
+        function downloadFile(filename) {
+            // In a real deployment, these would be actual file URLs
+            const fileUrls = {
+                'JARVIX-1.0.0-arm64-mac.zip': '/downloads/JARVIX-1.0.0-arm64-mac.zip',
+                'JARVIX-1.0.0-intel-mac.zip': '/downloads/JARVIX-1.0.0-intel-mac.zip'
+            };
+
+            const url = fileUrls[filename];
+            if (url) {
+                // Create download link
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                // Show download notification
+                showDownloadNotification(filename);
+            }
+        }
+
+        function showDownloadNotification(filename) {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #238636;
+                color: white;
+                padding: 1rem 1.5rem;
+                border-radius: 8px;
+                font-weight: 500;
+                z-index: 10000;
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+                animation: slideIn 0.3s ease-out;
+            `;
+            notification.innerHTML = `
+                <i class="fas fa-download"></i>
+                Downloading ${filename}...
+            `;
+
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease-out';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 3000);
+        }
+
+        // Add CSS for animations
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from {
+                    transform: translateX(100%);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+            }
+            @keyframes slideOut {
+                from {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+                to {
+                    transform: translateX(100%);
+                    opacity: 0;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Auto-detect platform and highlight recommended download
+        function detectPlatform() {
+            const platform = navigator.platform.toLowerCase();
+            const userAgent = navigator.userAgent.toLowerCase();
+            
+            if (platform.includes('mac') || userAgent.includes('mac')) {
+                // Detect Apple Silicon vs Intel
+                if (userAgent.includes('arm') || userAgent.includes('aarch64')) {
+                    return 'arm64';
+                } else {
+                    return 'intel';
+                }
+            }
+            return 'arm64'; // default to arm64 for modern Macs
+        }
+
+        // Highlight recommended download
+        document.addEventListener('DOMContentLoaded', () => {
+            const platform = detectPlatform();
+            const downloadItems = document.querySelectorAll('.download-item');
+            
+            downloadItems.forEach(item => {
+                const title = item.querySelector('h3').textContent.toLowerCase();
+                if ((platform === 'arm64' && title.includes('apple silicon')) ||
+                    (platform === 'intel' && title.includes('intel'))) {
+                    
+                    item.style.border = '2px solid #00d4ff';
+                    item.style.background = 'rgba(0, 212, 255, 0.05)';
+                    
+                    // Add recommended badge
+                    const badge = document.createElement('div');
+                    badge.style.cssText = `
+                        position: absolute;
+                        top: -8px;
+                        right: 16px;
+                        background: #00d4ff;
+                        color: #0d1117;
+                        padding: 2px 8px;
+                        border-radius: 12px;
+                        font-size: 0.75rem;
+                        font-weight: 600;
+                    `;
+                    badge.textContent = 'Recommended';
+                    item.style.position = 'relative';
+                    item.appendChild(badge);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

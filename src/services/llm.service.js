@@ -453,23 +453,46 @@ class LLMService {
       }
     };
 
-    // Use the skill prompt from context (which may already include programming language)
-    if (skillContext.skillPrompt) {
+    // Try to get enhanced context for better referencing
+    const sessionManager = require('../managers/session.manager');
+    let enhancedContext = null;
+    
+    try {
+      if (sessionManager && typeof sessionManager.getEnhancedConversationContext === 'function') {
+        enhancedContext = sessionManager.getEnhancedConversationContext(15);
+      }
+    } catch (error) {
+      logger.warn('Failed to get enhanced context, falling back to basic history', { error: error.message });
+    }
+
+    // Build system instruction with enhanced context
+    let systemPrompt = skillContext.skillPrompt || '';
+    
+    if (enhancedContext && enhancedContext.summary) {
+      const contextSummary = this.buildContextualPrompt(enhancedContext.summary, enhancedContext.threadInfo);
+      systemPrompt += `\n\n${contextSummary}`;
+    }
+
+    if (systemPrompt) {
       request.systemInstruction = {
-        parts: [{ text: skillContext.skillPrompt }]
+        parts: [{ text: systemPrompt }]
       };
       
-      logger.debug('Using skill context prompt as system instruction', {
+      logger.debug('Using enhanced skill context prompt as system instruction', {
         skill: activeSkill,
         programmingLanguage: programmingLanguage || 'not specified',
-        promptLength: skillContext.skillPrompt.length,
-        requiresProgrammingLanguage: skillContext.requiresProgrammingLanguage || false,
-        hasLanguageInjection: programmingLanguage && skillContext.requiresProgrammingLanguage
+        promptLength: systemPrompt.length,
+        hasEnhancedContext: !!enhancedContext,
+        contextEventCount: enhancedContext?.summary?.eventCount || 0,
+        threadCount: enhancedContext?.threadInfo?.threadCount || 0
       });
     }
 
+    // Use enhanced conversation if available, otherwise fall back to basic history
+    const conversationToUse = enhancedContext ? enhancedContext.conversation : conversationHistory;
+
     // Add conversation history (excluding system messages) with validation
-    const conversationContents = conversationHistory
+    const conversationContents = conversationToUse
       .filter(event => {
         return event.role !== 'system' && 
                event.content && 
@@ -477,7 +500,13 @@ class LLMService {
                event.content.trim().length > 0;
       })
       .map(event => {
-        const content = event.content.trim();
+        let content = event.content.trim();
+        
+        // Add contextual markers for referenced content
+        if (event.isContextual) {
+          content = `[Referenced earlier]: ${content}`;
+        }
+        
         return {
           role: event.role === 'model' ? 'model' : 'user',
           parts: [{ text: content }]
@@ -488,7 +517,7 @@ class LLMService {
     request.contents.push(...conversationContents);
 
     // Format and validate the current user input
-    const formattedMessage = this.formatUserMessage(text, activeSkill);
+    const formattedMessage = this.formatUserMessageWithContext(text, activeSkill, enhancedContext);
     if (!formattedMessage || formattedMessage.trim().length === 0) {
       throw new Error('Failed to format user message or message is empty');
     }
@@ -499,16 +528,67 @@ class LLMService {
       parts: [{ text: formattedMessage }]
     });
 
-    logger.debug('Built Gemini request with conversation history', {
+    logger.debug('Built Gemini request with enhanced conversation history', {
       skill: activeSkill,
       programmingLanguage: programmingLanguage || 'not specified',
-      historyLength: conversationHistory.length,
+      historyLength: conversationToUse.length,
       totalContents: request.contents.length,
       hasSystemInstruction: !!request.systemInstruction,
-      requiresProgrammingLanguage: skillContext.requiresProgrammingLanguage || false
+      hasEnhancedContext: !!enhancedContext,
+      contextualEvents: enhancedContext?.conversation?.filter(e => e.isContextual)?.length || 0
     });
 
     return request;
+  }
+
+  /**
+   * Build contextual prompt addition for better history referencing
+   */
+  buildContextualPrompt(summary, threadInfo) {
+    let contextPrompt = '\n## Conversation Context:\n';
+    
+    if (summary.topics && summary.topics.length > 0) {
+      contextPrompt += `Recent topics discussed: ${summary.topics.join(', ')}\n`;
+    }
+    
+    if (summary.hasCode) {
+      contextPrompt += 'This conversation has involved code discussion and implementation.\n';
+    }
+    
+    if (summary.hasImageAnalysis) {
+      contextPrompt += 'This conversation has involved image/screenshot analysis.\n';
+    }
+    
+    if (threadInfo && threadInfo.currentThread) {
+      contextPrompt += `Current discussion topic: "${threadInfo.currentThread.topic}"\n`;
+    }
+    
+    contextPrompt += '\nWhen the user references "earlier", "before", "you said", etc., refer to the marked [Referenced earlier] content in the conversation history for proper context.';
+    
+    return contextPrompt;
+  }
+
+  /**
+   * Format user message with enhanced context awareness
+   */
+  formatUserMessageWithContext(text, activeSkill, enhancedContext) {
+    let message = `Context: ${activeSkill.toUpperCase()} analysis request\n\nText to analyze:\n${text}`;
+    
+    // Check if this looks like a reference to previous conversation
+    const textLower = text.toLowerCase();
+    const referenceKeywords = [
+      'you said', 'you mentioned', 'earlier', 'before', 'previous', 
+      'that answer', 'your response', 'you told me', 'what you said',
+      'from before', 'remember when', 'like you said', 'as you mentioned'
+    ];
+    
+    const hasReference = referenceKeywords.some(keyword => textLower.includes(keyword));
+    
+    if (hasReference && enhancedContext) {
+      message += '\n\nNote: This message contains references to earlier conversation. Please check the [Referenced earlier] content in the conversation history for proper context.';
+    }
+    
+    return message;
   }
 
   buildIntelligentTranscriptionRequest(text, activeSkill, sessionMemory, programmingLanguage) {

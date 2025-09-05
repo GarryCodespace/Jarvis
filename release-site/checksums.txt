@@ -1,0 +1,2 @@
+058d8fa9d75d4379e43a23600e3e15aeee35166ea5fae6cfbaa36034a9d10f96  JARVIX-1.0.0-arm64-mac.zip
+b28fac21b129488b92975cee2fdb281ee18a8b6d1afb87062b4d13426badb93a  JARVIX-1.0.0-intel-mac.zip

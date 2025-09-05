@@ -250,8 +250,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    // Initialize icon grid
-    initializeIconGrid();
+    // Icon grid disabled - app always uses terminal icon
+    // initializeIconGrid();
 
     // Request settings on load
     setTimeout(() => {

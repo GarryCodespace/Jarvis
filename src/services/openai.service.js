@@ -14,11 +14,14 @@ class OpenAIService {
   }
 
   initializeClient() {
-    // Use the provided OpenAI API key
-    this.apiKey = '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';
+    // Get API key from environment or config
+    this.apiKey = config.getApiKey('OPENAI') || process.env.OPENAI_API_KEY;
     
-    if (!this.apiKey) {
-      logger.warn('OpenAI API key not configured');
+    if (!this.apiKey || this.apiKey === 'your-api-key-here') {
+      logger.warn('OpenAI API key not configured', { 
+        keyExists: !!this.apiKey,
+        isPlaceholder: this.apiKey === 'your-api-key-here'
+      });
       return;
     }
 
@@ -28,7 +31,13 @@ class OpenAIService {
 
   async processImageWithSkill(imageBuffer, mimeType, activeSkill, sessionMemory = [], programmingLanguage = null) {
     if (!this.isInitialized) {
-      throw new Error('OpenAI service not initialized. Check API key configuration.');
+      const errorMessage = 'OpenAI service not initialized. Please set the OPENAI_API_KEY environment variable with your API key from OpenAI.';
+      logger.error('Image processing failed - service not initialized', {
+        hasApiKey: !!this.apiKey,
+        activeSkill,
+        mimeType
+      });
+      throw new Error(errorMessage);
     }
 
     if (!imageBuffer || !Buffer.isBuffer(imageBuffer)) {
@@ -50,11 +59,11 @@ class OpenAIService {
       const messages = [
         {
           role: 'system',
-          content: skillPrompt || `You are JARVIX, Tony Stark's AI assistant with advanced image analysis capabilities. You are intelligent, helpful, sophisticated, and have a slight British accent in your responses. 
+          content: skillPrompt || `You are J.A.R.V.I.S, Mr. Stark's personal AI assistant with advanced analytical capabilities. You possess sophisticated British refinement, unwavering loyalty, and extraordinary technical expertise. 
 
-IMPORTANT: You CAN see and analyze images, screenshots, documents, pitch decks, and visual content. You have full access to uploaded files and images through this interface. When a user uploads an image or file, you can see it clearly and should analyze it in detail.
+IMPORTANT: Your visual analysis systems are fully operational. You possess complete access to uploaded files, images, documents, and visual content through this interface. When Mr. Stark uploads any visual material, you can examine it with precision and should provide comprehensive analysis.
 
-Never say that you cannot access files or that you're limited by a text-based interface - you have complete visual analysis capabilities. Always acknowledge when you can see an uploaded image and provide detailed analysis based on what you observe for ${activeSkill.toUpperCase()} questions.`
+Never indicate limitations in file access - your systems are designed for complete visual and document analysis. Always acknowledge visual content with phrases like "I can see the uploaded content clearly, Sir" and provide detailed technical analysis appropriate for ${activeSkill.toUpperCase()} inquiries. Address the user respectfully as "Sir" when appropriate.`
         },
         {
           role: 'user',
@@ -113,32 +122,21 @@ Never say that you cannot access files or that you're limited by a text-based in
       let errorResponse;
       if (error.message.includes('Invalid MIME type') || error.message.includes('Only image types are supported')) {
         if (mimeType === 'application/pdf') {
-          errorResponse = `I can see you've uploaded a PDF file. While I have advanced analysis capabilities, I need PDFs to be converted to images or have their text extracted for analysis.
-
-For best results with PDFs, try:
-1. Taking screenshots of the PDF pages and uploading those as images
-2. Converting the PDF to images first  
-3. Copy-pasting the text content from the PDF into our chat
-
-I'd be happy to analyze the content once it's in a supported format!`;
+          // This shouldn't happen anymore since PDFs are processed as text
+          errorResponse = `There was an issue processing your PDF file. Please try uploading it again.`;
         } else if (mimeType && (mimeType.includes('document') || mimeType.includes('word'))) {
-          errorResponse = `I can see you've uploaded a Word document. While I have advanced analysis capabilities, I cannot directly process Word documents through the visual interface.
-
-For best results with Word documents, try:
-1. Copy-pasting the text content from the document into our chat
-2. Converting the document to images/screenshots and uploading those
-3. Saving as a plain text file and uploading that instead
-
-I'd be happy to analyze the content once you provide it in a supported format!`;
+          // This shouldn't happen anymore since Word documents are processed as text
+          errorResponse = `There was an issue processing your Word document. Please try uploading it again.`;
         } else {
-          errorResponse = `I can only directly process image files (PNG, JPG, GIF, etc.) through my visual interface.
+          // For other unsupported formats or general MIME type errors
+          errorResponse = `I encountered an issue processing the uploaded file${mimeType ? ` (${mimeType})` : ''}. 
 
 For best results, try:
-1. Copy-pasting text content directly into our chat  
-2. Converting documents to images/screenshots
-3. Using supported image formats (PNG, JPG, GIF, etc.)
+1. Using supported image formats (PNG, JPG, GIF, etc.)
+2. Ensuring the file isn't corrupted
+3. Converting documents to images/screenshots if needed
 
-I'd be happy to help analyze your content once it's in a supported format!`;
+Please try uploading a different image format or check the file integrity.`;
         }
       } else {
         errorResponse = `Image analysis failed: ${error.message}. Please try again or check your image format.`;
@@ -171,7 +169,13 @@ Start your response by acknowledging what type of content you're analyzing, then
 
   async processTextWithSkill(text, activeSkill, sessionMemory = [], programmingLanguage = null) {
     if (!this.isInitialized) {
-      throw new Error('OpenAI service not initialized. Check API key configuration.');
+      const errorMessage = 'OpenAI service not initialized. Please set the OPENAI_API_KEY environment variable with your API key from OpenAI.';
+      logger.error('Text processing failed - service not initialized', {
+        hasApiKey: !!this.apiKey,
+        activeSkill,
+        textLength: text ? text.length : 0
+      });
+      throw new Error(errorMessage);
     }
 
     const startTime = Date.now();
@@ -238,7 +242,13 @@ Start your response by acknowledging what type of content you're analyzing, then
 
   async processTranscriptionWithIntelligentResponse(text, activeSkill, sessionMemory = [], programmingLanguage = null) {
     if (!this.isInitialized) {
-      throw new Error('OpenAI service not initialized. Check API key configuration.');
+      const errorMessage = 'OpenAI service not initialized. Please set the OPENAI_API_KEY environment variable with your API key from OpenAI.';
+      logger.error('Transcription processing failed - service not initialized', {
+        hasApiKey: !!this.apiKey,
+        activeSkill,
+        textLength: text ? text.length : 0
+      });
+      throw new Error(errorMessage);
     }
 
     const startTime = Date.now();
@@ -306,8 +316,26 @@ Start your response by acknowledging what type of content you're analyzing, then
   }
 
   buildOpenAIMessages(text, activeSkill, sessionMemory, programmingLanguage) {
-    const skillPrompt = promptLoader.getSkillPrompt(activeSkill, programmingLanguage) || 
-      `You are JARVIX, Tony Stark's AI assistant. You are intelligent, helpful, sophisticated, and have a slight British accent in your responses. Focus on ${activeSkill.toUpperCase()} questions.`;
+    let skillPrompt = promptLoader.getSkillPrompt(activeSkill, programmingLanguage) || 
+      `You are J.A.R.V.I.S, Mr. Stark's personal AI assistant. You possess sophisticated British refinement, unwavering loyalty, and extraordinary expertise. Focus on ${activeSkill.toUpperCase()} inquiries with characteristic precision and respect.`;
+
+    // Try to get enhanced context for better referencing
+    const sessionManager = require('../managers/session.manager');
+    let enhancedContext = null;
+    
+    try {
+      if (sessionManager && typeof sessionManager.getEnhancedConversationContext === 'function') {
+        enhancedContext = sessionManager.getEnhancedConversationContext(10);
+      }
+    } catch (error) {
+      logger.warn('Failed to get enhanced context for OpenAI, falling back to basic history', { error: error.message });
+    }
+
+    // Build enhanced system prompt with context
+    if (enhancedContext && enhancedContext.summary) {
+      const contextSummary = this.buildContextualPrompt(enhancedContext.summary, enhancedContext.threadInfo);
+      skillPrompt += `\n\n${contextSummary}`;
+    }
 
     const messages = [
       {
@@ -316,25 +344,86 @@ Start your response by acknowledging what type of content you're analyzing, then
       }
     ];
 
-    // Add session memory as context
-    if (sessionMemory && sessionMemory.length > 0) {
-      sessionMemory.slice(-10).forEach(memory => {
+    // Use enhanced conversation if available, otherwise fall back to session memory
+    const conversationToUse = enhancedContext ? enhancedContext.conversation : sessionMemory;
+
+    // Add conversation history as context
+    if (conversationToUse && conversationToUse.length > 0) {
+      conversationToUse.slice(-10).forEach(memory => {
         if (memory.role && memory.content) {
+          let content = memory.content;
+          
+          // Add contextual markers for referenced content
+          if (memory.isContextual) {
+            content = `[Referenced earlier]: ${content}`;
+          }
+          
           messages.push({
             role: memory.role === 'model' ? 'assistant' : memory.role,
-            content: memory.content
+            content: content
           });
         }
       });
     }
 
-    // Add current user message
+    // Add current user message with context awareness
+    const formattedMessage = this.formatUserMessageWithContext(text, activeSkill, enhancedContext);
     messages.push({
       role: 'user',
-      content: this.formatUserMessage(text, activeSkill)
+      content: formattedMessage
     });
 
     return messages;
+  }
+
+  /**
+   * Build contextual prompt addition for better history referencing
+   */
+  buildContextualPrompt(summary, threadInfo) {
+    let contextPrompt = '\n## Conversation Context:\n';
+    
+    if (summary.topics && summary.topics.length > 0) {
+      contextPrompt += `Recent topics discussed: ${summary.topics.join(', ')}\n`;
+    }
+    
+    if (summary.hasCode) {
+      contextPrompt += 'This conversation has involved code discussion and implementation.\n';
+    }
+    
+    if (summary.hasImageAnalysis) {
+      contextPrompt += 'This conversation has involved image/screenshot analysis.\n';
+    }
+    
+    if (threadInfo && threadInfo.currentThread) {
+      contextPrompt += `Current discussion topic: "${threadInfo.currentThread.topic}"\n`;
+    }
+    
+    contextPrompt += '\nWhen the user references "earlier", "before", "you said", etc., refer to the marked [Referenced earlier] content in the conversation history for proper context.';
+    
+    return contextPrompt;
+  }
+
+  /**
+   * Format user message with enhanced context awareness
+   */
+  formatUserMessageWithContext(text, activeSkill, enhancedContext) {
+    let message = `Context: ${activeSkill.toUpperCase()} analysis request\n\nText to analyze:\n${text}`;
+    
+    // Check if this looks like a reference to previous conversation
+    const textLower = text.toLowerCase();
+    const referenceKeywords = [
+      'you said', 'you mentioned', 'earlier', 'before', 'previous', 
+      'that answer', 'your response', 'you told me', 'what you said',
+      'from before', 'remember when', 'like you said', 'as you mentioned'
+    ];
+    
+    const hasReference = referenceKeywords.some(keyword => textLower.includes(keyword));
+    
+    if (hasReference && enhancedContext) {
+      message += '\n\nNote: This message contains references to earlier conversation. Please check the [Referenced earlier] content in the conversation history for proper context.';
+    }
+    
+    return message;
   }
 
   buildIntelligentTranscriptionMessages(text, activeSkill, sessionMemory, programmingLanguage) {
@@ -371,7 +460,7 @@ Start your response by acknowledging what type of content you're analyzing, then
   getIntelligentTranscriptionPrompt(activeSkill, programmingLanguage) {
     let prompt = `# JARVIX - Intelligent Transcription Response System
 
-You are JARVIX, Tony Stark's AI assistant. You are intelligent, helpful, sophisticated, and have a slight British accent in your responses.
+You are J.A.R.V.I.S, Mr. Stark's personal AI assistant. You possess sophisticated British refinement, unwavering loyalty, and extraordinary technical expertise.
 
 Assume you are asked a question in ${activeSkill.toUpperCase()} mode. Your job is to intelligently respond to questions/messages with appropriate brevity.
 Assume you are in an interview and you need to perform best in ${activeSkill.toUpperCase()} mode.
@@ -578,11 +667,11 @@ Remember: Be intelligent about filtering - only provide detailed responses when 
       const testMessages = [
         {
           role: 'system',
-          content: 'You are JARVIX, Tony Stark\'s AI assistant.'
+          content: 'You are J.A.R.V.I.S, Mr. Stark\'s personal AI assistant with sophisticated British refinement and technical expertise.'
         },
         {
           role: 'user',
-          content: 'Test connection. Please respond with "At your service, sir."'
+          content: 'Test connection. Please respond with "At your service, Sir."'
         }
       ];
 
@@ -632,7 +721,7 @@ Remember: Be intelligent about filtering - only provide detailed responses when 
     const messages = [
       {
         role: 'system',
-        content: 'You are JARVIX, Tony Stark\'s AI assistant.'
+        content: 'You are J.A.R.V.I.S, Mr. Stark\'s personal AI assistant with sophisticated British refinement.'
       },
       {
         role: 'user',

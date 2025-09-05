@@ -37,9 +37,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getOpenAIStatus: () => ipcRenderer.invoke('get-openai-status'),
   testOpenAIConnection: () => ipcRenderer.invoke('test-openai-connection'),
   
+  // Payment and subscription
+  initiatePremiumUpgrade: (plan) => ipcRenderer.invoke('initiate-premium-upgrade', plan),
+  checkPremiumStatus: () => ipcRenderer.invoke('check-premium-status'),
+  cancelSubscription: () => ipcRenderer.invoke('cancel-subscription'),
+  getSubscriptionManagement: () => ipcRenderer.invoke('get-subscription-management'),
+  
+  // Authentication (legacy - for backward compatibility)
+  authSignUp: (email, password) => ipcRenderer.invoke('auth-sign-up', email, password),
+  authSignIn: (email, password) => ipcRenderer.invoke('auth-sign-in', email, password),
+  authSignOut: () => ipcRenderer.invoke('auth-sign-out'),
+  authGetUser: () => ipcRenderer.invoke('auth-get-user'),
+  // authGoogleSignIn: () => ipcRenderer.invoke('auth-google-sign-in'), // Temporarily disabled
+  
   // Settings
   showSettings: () => ipcRenderer.invoke('show-settings'),
   hideSettings: () => ipcRenderer.invoke('hide-settings'),
+
+  // Auth window
+  showAuth: () => ipcRenderer.invoke('show-auth'),
+  hideAuth: () => ipcRenderer.invoke('hide-auth'),
   getSettings: () => ipcRenderer.invoke('get-settings'),
   saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
   updateAppIcon: (iconKey) => ipcRenderer.invoke('update-app-icon', iconKey),
@@ -48,13 +65,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
   closeWindow: () => ipcRenderer.invoke('close-window'),
   quit: () => {
     try {
+      // Primary quit method
       ipcRenderer.send('quit-app');
-      // Also try the app quit method
+      
+      // Fallback quit methods with increasing delay
       setTimeout(() => {
-        require('electron').app.quit();
+        ipcRenderer.invoke('quit-app').catch(() => {
+          // Final fallback - force close
+          window.close();
+        });
       }, 100);
+      
     } catch (error) {
       console.error('Error in quit:', error);
+      // Emergency quit
+      try {
+        window.close();
+      } catch (e) {
+        console.error('Emergency quit failed:', e);
+      }
     }
   },
   
@@ -103,6 +132,49 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // Remove listeners
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel)
+})
+
+// New auth API contract for React renderer
+contextBridge.exposeInMainWorld('electron', {
+  auth: {
+    // Methods (async/invoke)
+    signInWithGoogle: () => ipcRenderer.invoke('auth-google-signin'),
+    signOut: () => ipcRenderer.invoke('auth-signout'),
+    getCachedSession: () => ipcRenderer.invoke('auth-get-cached-session'),
+    ensureDeviceRegistered: () => ipcRenderer.invoke('auth-ensure-device-registered'),
+    audit: (event) => ipcRenderer.invoke('auth-audit', event),
+
+    // Event handlers (will be assigned by renderer)
+    loginSuccess: null,
+    loginFailed: null,
+    loggedOut: null,
+
+    // Event listener setup (called by renderer)
+    onLoginSuccess: (callback) => {
+      ipcRenderer.on('auth-login-success', (event, session) => {
+        if (typeof callback === 'function') callback(session);
+      });
+    },
+
+    onLoginFailed: (callback) => {
+      ipcRenderer.on('auth-login-failed', (event, message) => {
+        if (typeof callback === 'function') callback(message);
+      });
+    },
+
+    onLoggedOut: (callback) => {
+      ipcRenderer.on('auth-logged-out', () => {
+        if (typeof callback === 'function') callback();
+      });
+    },
+
+    // Remove event listeners
+    removeAllAuthListeners: () => {
+      ipcRenderer.removeAllListeners('auth-login-success');
+      ipcRenderer.removeAllListeners('auth-login-failed');
+      ipcRenderer.removeAllListeners('auth-logged-out');
+    },
+  }
 })
 
 contextBridge.exposeInMainWorld('api', {

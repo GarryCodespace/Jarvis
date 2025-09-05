@@ -74,6 +74,23 @@ class WindowManager {
         alwaysOnTop: true,
         visibleOnAllWorkspaces: true,
         fullscreenable: false
+      },
+      auth: {
+        width: 680,
+        height: 600,
+        file: 'auth.html',
+        title: 'Jarvix - Sign In',
+        frame: true,
+        titleBarStyle: 'default',
+        transparent: false,
+        skipTaskbar: false,
+        resizable: true,
+        minimizable: true,
+        maximizable: true,
+        closable: true,
+        alwaysOnTop: false,
+        visibleOnAllWorkspaces: false,
+        fullscreenable: false
       }
     };
 
@@ -207,6 +224,15 @@ class WindowManager {
     this.windows.set('settings', window);
     window.hide();
     return window;
+  }
+
+  async createAuthWindow() {
+    if (this.windows.has('auth')) {
+      return this.windows.get('auth');
+    }
+    const window = await this.createWindow('auth');
+    this.windows.set('auth', window);
+    return window; // Show auth window by default when created
   }
 
   async createWindow(type, showOnCreate = false) {
@@ -361,6 +387,23 @@ class WindowManager {
           acceptFirstMouse: true
         }),
         level: process.platform === 'darwin' ? 'floating' : undefined,
+      };
+    } else if (type === 'auth') {
+      // Auth window - normal window style for authentication
+      browserWindowOptions = {
+        ...baseOptions,
+        frame: true,
+        titleBarStyle: 'default',
+        transparent: false,
+        resizable: true,
+        minimizable: true,
+        maximizable: true,
+        closable: true,
+        hasShadow: true,
+        skipTaskbar: false,
+        alwaysOnTop: false,
+        visibleOnAllWorkspaces: false,
+        backgroundColor: '#ffffff',
       };
     } else {
       // Other windows (skills)
@@ -642,7 +685,8 @@ class WindowManager {
       chat: { x: displayX + screenWidth - windowWidth - 50, y: displayY + topMargin },
       chatgpt: { x: displayX + screenWidth - windowWidth - 20, y: displayY + topMargin },
       llmResponse: { x: displayX + (screenWidth - windowWidth) / 2, y: displayY + topMargin },
-      settings: { x: displayX + (screenWidth - windowWidth) / 2, y: displayY + topMargin }
+      settings: { x: displayX + (screenWidth - windowWidth) / 2, y: displayY + topMargin },
+      auth: { x: displayX + (screenWidth - windowWidth) / 2, y: displayY + topMargin }
     };
 
     const position = positions[type] || { x: displayX + 100, y: displayY + topMargin };
@@ -851,7 +895,98 @@ class WindowManager {
         // Simplified restore handling
         logger.debug('Window restored', { type });
       });
+
+      // Add double-click detection for header enlargement
+      window.webContents.executeJavaScript(`
+        (function() {
+          let clickTimeout;
+          let clickCount = 0;
+          
+          document.addEventListener('click', function(e) {
+            // Check if click is in header area (top 50px)
+            if (e.clientY <= 50) {
+              clickCount++;
+              
+              if (clickCount === 1) {
+                clickTimeout = setTimeout(() => {
+                  clickCount = 0;
+                }, 300);
+              } else if (clickCount === 2) {
+                clearTimeout(clickTimeout);
+                clickCount = 0;
+                
+                // Send double-click event to main process
+                require('electron').ipcRenderer.send('header-double-click', '${type}');
+              }
+            }
+          });
+        })();
+      `).catch(err => logger.warn('Failed to inject double-click handler', { type, error: err.message }));
     });
+
+    // Store original sizes for toggle functionality
+    this.originalSizes = new Map();
+  }
+
+  toggleWindowSize(windowType) {
+    const window = this.windows.get(windowType);
+    if (!window || window.isDestroyed()) {
+      logger.warn('Cannot toggle size for window', { windowType, exists: !!window });
+      return;
+    }
+
+    try {
+      const currentBounds = window.getBounds();
+      const originalSize = this.originalSizes.get(windowType);
+
+      if (!originalSize) {
+        // Store current size as original and enlarge
+        this.originalSizes.set(windowType, { width: currentBounds.width, height: currentBounds.height });
+        
+        // Enlarge window (double the size, but respect screen bounds)
+        const { screen } = require('electron');
+        const display = screen.getPrimaryDisplay();
+        const maxWidth = Math.min(currentBounds.width * 2, display.workAreaSize.width - 100);
+        const maxHeight = Math.min(currentBounds.height * 2, display.workAreaSize.height - 100);
+        
+        window.setBounds({
+          ...currentBounds,
+          width: maxWidth,
+          height: maxHeight
+        });
+        
+        logger.debug('Window enlarged', { windowType, newSize: { width: maxWidth, height: maxHeight } });
+      } else {
+        // Check if currently enlarged (compare with original size)
+        const isEnlarged = currentBounds.width > originalSize.width || currentBounds.height > originalSize.height;
+        
+        if (isEnlarged) {
+          // Restore to original size
+          window.setBounds({
+            ...currentBounds,
+            width: originalSize.width,
+            height: originalSize.height
+          });
+          logger.debug('Window restored to original size', { windowType, originalSize });
+        } else {
+          // Enlarge again
+          const { screen } = require('electron');
+          const display = screen.getPrimaryDisplay();
+          const maxWidth = Math.min(originalSize.width * 2, display.workAreaSize.width - 100);
+          const maxHeight = Math.min(originalSize.height * 2, display.workAreaSize.height - 100);
+          
+          window.setBounds({
+            ...currentBounds,
+            width: maxWidth,
+            height: maxHeight
+          });
+          
+          logger.debug('Window enlarged again', { windowType, newSize: { width: maxWidth, height: maxHeight } });
+        }
+      }
+    } catch (error) {
+      logger.error('Error toggling window size', { windowType, error: error.message });
+    }
   }
 
   setupScreenSharingDetection() {
@@ -1272,6 +1407,35 @@ class WindowManager {
     const settingsWindow = this.windows.get('settings');
     if (settingsWindow) {
       settingsWindow.hide();
+    }
+  }
+
+  async showAuth() {
+    // Create auth window if it doesn't exist
+    if (!this.windows.has('auth')) {
+      await this.createAuthWindow();
+    }
+    
+    const authWindow = this.windows.get('auth');
+    if (authWindow) {
+      this.showOnCurrentDesktop(authWindow);
+      this.centerWindow(authWindow);
+      
+      // Focus the auth window
+      setTimeout(() => {
+        if (!authWindow.isDestroyed()) {
+          authWindow.focus();
+        }
+      }, 100);
+      
+      logger.info('Auth window shown');
+    }
+  }
+
+  hideAuth() {
+    const authWindow = this.windows.get('auth');
+    if (authWindow) {
+      authWindow.hide();
     }
   }
 

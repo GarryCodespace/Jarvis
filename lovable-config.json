@@ -1,0 +1,165 @@
+{
+  "name": "JARVIX",
+  "displayName": "J.A.R.V.I.X - AI Assistant",
+  "description": "Your intelligent AI assistant for problem-solving, productivity, and creativity. Built with Electron, featuring voice recognition, image processing, and beautiful UI.",
+  "version": "1.0.0",
+  "type": "electron-app",
+  "category": "productivity",
+  "tags": ["AI", "assistant", "productivity", "electron", "voice-recognition", "image-processing"],
+  
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TechyCSR/JARVIX.git"
+  },
+  
+  "author": {
+    "name": "TechyCSR",
+    "email": "dev@techycsr.me",
+    "url": "https://github.com/TechyCSR"
+  },
+  
+  "screenshots": [
+    "./screenshots/main-interface.png",
+    "./screenshots/voice-recognition.png",
+    "./screenshots/image-processing.png",
+    "./screenshots/file-attachments.png"
+  ],
+  
+  "deployment": {
+    "platform": "electron",
+    "nodeVersion": "18",
+    "buildCommand": "npm run build:all",
+    "startCommand": "npm start",
+    "installCommand": "npm install",
+    "outputDir": "dist/",
+    
+    "environmentVariables": {
+      "GOOGLE_API_KEY": {
+        "required": false,
+        "description": "Google Gemini API key for AI responses",
+        "type": "secret"
+      },
+      "OPENAI_API_KEY": {
+        "required": false,
+        "description": "OpenAI API key as fallback AI provider",
+        "type": "secret"
+      },
+      "AZURE_SPEECH_KEY": {
+        "required": false,
+        "description": "Azure Speech Services key for voice recognition",
+        "type": "secret"
+      },
+      "AZURE_SPEECH_REGION": {
+        "required": false,
+        "description": "Azure Speech Services region",
+        "type": "string",
+        "default": "eastus"
+      }
+    },
+    
+    "buildTargets": {
+      "mac": {
+        "enabled": true,
+        "artifacts": ["dmg", "zip"],
+        "architectures": ["x64", "arm64"]
+      },
+      "windows": {
+        "enabled": true,
+        "artifacts": ["exe", "zip"],
+        "architectures": ["x64"]
+      },
+      "linux": {
+        "enabled": true,
+        "artifacts": ["AppImage", "deb", "rpm"],
+        "architectures": ["x64"]
+      }
+    }
+  },
+  
+  "features": {
+    "aiAssistant": {
+      "name": "AI Assistant",
+      "description": "Powered by Google Gemini and OpenAI",
+      "enabled": true
+    },
+    "voiceRecognition": {
+      "name": "Voice Recognition", 
+      "description": "Azure Speech Services integration",
+      "enabled": true,
+      "optional": true
+    },
+    "imageProcessing": {
+      "name": "Image Processing",
+      "description": "Analyze and understand images with AI",
+      "enabled": true
+    },
+    "fileAttachments": {
+      "name": "File Attachments",
+      "description": "Drag & drop files, paste images directly",
+      "enabled": true
+    },
+    "noAuthentication": {
+      "name": "No Sign-in Required",
+      "description": "Works immediately without account creation",
+      "enabled": true
+    },
+    "crossPlatform": {
+      "name": "Cross Platform",
+      "description": "Works on macOS, Windows, and Linux",
+      "enabled": true
+    }
+  },
+  
+  "systemRequirements": {
+    "minimum": {
+      "memory": "4GB RAM",
+      "storage": "500MB",
+      "os": {
+        "mac": "macOS 10.15+",
+        "windows": "Windows 10+", 
+        "linux": "Ubuntu 18.04+"
+      }
+    },
+    "recommended": {
+      "memory": "8GB RAM",
+      "storage": "1GB",
+      "internetConnection": "Required for AI features"
+    }
+  },
+  
+  "downloadPage": {
+    "enabled": true,
+    "path": "./website/download.html",
+    "customDomain": false,
+    "analytics": {
+      "enabled": true,
+      "trackDownloads": true,
+      "trackPlatforms": true
+    }
+  },
+  
+  "license": "ISC",
+  "homepage": "https://github.com/TechyCSR/JARVIX",
+  "issues": "https://github.com/TechyCSR/OpenCluely/issues",
+  
+  "keywords": [
+    "AI assistant",
+    "productivity",
+    "electron app", 
+    "voice recognition",
+    "image processing",
+    "JARVIX",
+    "artificial intelligence",
+    "desktop app",
+    "cross-platform",
+    "no-authentication"
+  ],
+  
+  "readme": "./JARVIX-README.md",
+  
+  "status": {
+    "development": "stable",
+    "maintenance": "active",
+    "lastUpdated": "2024-08-18"
+  }
+}

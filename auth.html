@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jarvix - Authentication</title>
+    
+    <!-- Security policy for desktop app -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' data: blob:; connect-src 'self' https:; font-src 'self' data:;" />
+    
+    <!-- Load built renderer styles -->
+    <link rel="stylesheet" href="./renderer/dist/assets/main-DUkV0B8K.css" />
+    
+    <!-- Dark mode detection -->
+    <script>
+      // Set initial theme based on system preference
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.documentElement.classList.add('dark');
+      }
+    </script>
+  </head>
+  
+  <body class="bg-gray-50 dark:bg-gray-900">
+    <!-- React app root -->
+    <div id="root"></div>
+    
+    <!-- Load the bundled React renderer -->
+    <script type="module" src="./renderer/dist/assets/main-CI62nfXt.js"></script>
+  </body>
+</html>

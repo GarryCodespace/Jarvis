@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <title>JARVIX</title>
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https:;">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     <style>
       * {
         margin: 0;
@@ -241,6 +241,44 @@
         position: relative;
       }
 
+      /* Enhanced paragraph and list formatting */
+      .message-text p {
+        margin: 0 0 12px 0;
+        line-height: 1.5;
+      }
+
+      .message-text p:last-child {
+        margin-bottom: 0;
+      }
+
+      .message-text ul {
+        margin: 8px 0;
+        padding-left: 20px;
+      }
+
+      .message-text li {
+        margin: 4px 0;
+        line-height: 1.4;
+      }
+
+      .message-text strong {
+        font-weight: 600;
+        color: rgba(255, 255, 255, 1);
+      }
+
+      .message-text em {
+        font-style: italic;
+        color: rgba(255, 255, 255, 0.9);
+      }
+
+      .message-text code {
+        background: rgba(0, 0, 0, 0.3);
+        padding: 2px 4px;
+        border-radius: 3px;
+        font-family: 'Monaco', 'Menlo', monospace;
+        font-size: 11px;
+      }
+
       .message.assistant .message-text {
         background: rgba(96, 165, 250, 0.1);
         border: 1px solid rgba(96, 165, 250, 0.2);
@@ -368,6 +406,21 @@
 
       .composer-input::placeholder {
         color: rgba(255, 255, 255, 0.5);
+      }
+
+      .composer-input:disabled {
+        background: rgba(255, 255, 255, 0.03);
+        color: rgba(255, 255, 255, 0.4);
+        cursor: not-allowed;
+      }
+
+      .composer-input:disabled::placeholder {
+        color: rgba(255, 255, 255, 0.3);
+      }
+
+      .composer-btn:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
       }
 
       .composer-actions {
@@ -529,6 +582,312 @@
 
       .app-container.non-interactive .click-through-banner {
         pointer-events: all;
+      }
+
+      /* Premium Upgrade Styles */
+      .message.premium-upgrade {
+        border: 1px solid rgba(255, 215, 0, 0.3);
+        border-radius: 12px;
+        background: linear-gradient(135deg, rgba(255, 215, 0, 0.05) 0%, rgba(255, 193, 7, 0.08) 100%);
+        box-shadow: 0 4px 16px rgba(255, 215, 0, 0.15);
+      }
+
+      .premium-message {
+        background: rgba(255, 215, 0, 0.1);
+        border: 1px solid rgba(255, 215, 0, 0.2);
+        border-radius: 8px;
+        color: rgba(255, 255, 255, 0.95);
+      }
+
+      .premium-upgrade-panel {
+        margin-top: 16px;
+        padding: 16px;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 8px;
+        border: 1px solid rgba(255, 215, 0, 0.3);
+      }
+
+      .upgrade-plans {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+      }
+
+      .plan-option {
+        flex: 1;
+        min-width: 180px;
+        padding: 12px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 8px;
+        transition: all 0.2s ease;
+      }
+
+      .plan-option:hover {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 215, 0, 0.4);
+        transform: translateY(-2px);
+      }
+
+      .plan-option.monthly-only {
+        border-color: rgba(255, 215, 0, 0.4);
+        background: rgba(255, 215, 0, 0.08);
+        max-width: 300px;
+        margin: 0 auto;
+      }
+
+      .plan-header {
+        margin-bottom: 12px;
+      }
+
+      .plan-name {
+        display: block;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.95);
+        font-size: 14px;
+      }
+
+      .plan-price {
+        display: block;
+        font-size: 18px;
+        font-weight: 700;
+        color: rgba(255, 215, 0, 0.9);
+        margin: 4px 0;
+      }
+
+      .plan-savings {
+        display: inline-block;
+        padding: 2px 8px;
+        background: rgba(34, 197, 94, 0.2);
+        border: 1px solid rgba(34, 197, 94, 0.3);
+        border-radius: 12px;
+        font-size: 10px;
+        color: rgba(34, 197, 94, 0.9);
+        font-weight: 500;
+      }
+
+      .upgrade-btn {
+        width: 100%;
+        padding: 10px 16px;
+        background: rgba(96, 165, 250, 0.8);
+        border: none;
+        border-radius: 6px;
+        color: white;
+        font-weight: 600;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .upgrade-btn:hover {
+        background: rgba(96, 165, 250, 1);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(96, 165, 250, 0.3);
+      }
+
+      .upgrade-btn-primary {
+        background: linear-gradient(135deg, rgba(255, 215, 0, 0.8) 0%, rgba(255, 193, 7, 0.9) 100%);
+        color: rgba(0, 0, 0, 0.9);
+        font-weight: 700;
+      }
+
+      .upgrade-btn-primary:hover {
+        background: linear-gradient(135deg, rgba(255, 215, 0, 1) 0%, rgba(255, 193, 7, 1) 100%);
+        box-shadow: 0 4px 16px rgba(255, 215, 0, 0.4);
+      }
+
+      .upgrade-actions {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+      }
+
+      .status-check-btn {
+        padding: 8px 16px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 6px;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .status-check-btn:hover {
+        background: rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 0.95);
+      }
+
+      /* Premium message styling */
+      .premium-message ul {
+        margin: 8px 0;
+        padding-left: 16px;
+      }
+
+      .premium-message li {
+        margin: 4px 0;
+        color: rgba(255, 255, 255, 0.9);
+      }
+
+      .premium-message strong {
+        color: rgba(255, 215, 0, 0.95);
+      }
+
+      /* Authentication UI Styles */
+      .user-info {
+        font-size: 10px;
+        color: rgba(0, 255, 255, 0.7);
+        margin-left: 8px;
+      }
+
+      .auth-prompt {
+        font-size: 10px;
+        color: rgba(255, 215, 0, 0.9);
+        margin-left: 8px;
+        cursor: pointer;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: rgba(255, 215, 0, 0.1);
+        border: 1px solid rgba(255, 215, 0, 0.3);
+        transition: all 0.2s ease;
+      }
+
+      .auth-prompt:hover {
+        background: rgba(255, 215, 0, 0.2);
+        transform: scale(1.05);
+      }
+
+      .sign-out-btn {
+        font-size: 10px;
+        color: rgba(255, 100, 100, 0.9);
+        margin-left: 8px;
+        cursor: pointer;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: rgba(255, 100, 100, 0.1);
+        border: 1px solid rgba(255, 100, 100, 0.3);
+        transition: all 0.2s ease;
+      }
+
+      .sign-out-btn:hover {
+        background: rgba(255, 100, 100, 0.2);
+        transform: scale(1.05);
+      }
+
+      .auth-container {
+        margin: 16px 0;
+        padding: 16px;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .auth-tabs {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 16px;
+      }
+
+      .auth-tab {
+        padding: 8px 16px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+        color: rgba(255, 255, 255, 0.7);
+        cursor: pointer;
+        font-size: 12px;
+        transition: all 0.2s ease;
+      }
+
+      .auth-tab:hover {
+        background: rgba(255, 255, 255, 0.15);
+        color: rgba(255, 255, 255, 0.9);
+      }
+
+      .auth-tab.active {
+        background: rgba(0, 255, 255, 0.2);
+        border-color: rgba(0, 255, 255, 0.4);
+        color: rgba(0, 255, 255, 0.9);
+      }
+
+      .auth-content {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .auth-content input {
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 6px;
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 12px;
+        outline: none;
+      }
+
+      .auth-content input:focus {
+        border-color: rgba(0, 255, 255, 0.4);
+        box-shadow: 0 0 0 2px rgba(0, 255, 255, 0.2);
+      }
+
+      .auth-content input::placeholder {
+        color: rgba(255, 255, 255, 0.5);
+      }
+
+      .auth-btn {
+        padding: 10px 16px;
+        background: linear-gradient(135deg, rgba(0, 255, 255, 0.8) 0%, rgba(0, 200, 255, 0.9) 100%);
+        border: none;
+        border-radius: 6px;
+        color: rgba(0, 0, 0, 0.9);
+        font-weight: 600;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .auth-btn:hover {
+        background: linear-gradient(135deg, rgba(0, 255, 255, 1) 0%, rgba(0, 200, 255, 1) 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 255, 255, 0.3);
+      }
+
+      /* Google Sign-In Button */
+      .google-auth-container {
+        display: flex;
+        justify-content: center;
+        padding: 8px 0;
+      }
+
+      .google-auth-btn {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 24px;
+        background: rgba(255, 255, 255, 0.95);
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        color: rgba(0, 0, 0, 0.87);
+        font-weight: 500;
+        font-size: 14px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        min-width: 200px;
+        justify-content: center;
+      }
+
+      .google-auth-btn:hover {
+        background: rgba(255, 255, 255, 1);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+      }
+
+      .google-auth-btn i {
+        color: #4285f4;
+        font-size: 16px;
       }
     </style>
   </head>

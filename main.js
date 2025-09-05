@@ -9,6 +9,9 @@ const config = require("./src/core/config");
 const captureService = require("./src/services/capture.service");
 const speechService = require("./src/services/speech.service");
 const llmService = require("./src/services/openai.service");
+const paymentService = require("./src/services/payment.service");
+const supabaseService = require("./src/services/supabase.service");
+const documentService = require("./src/services/pdf.service");
 
 // Managers
 const windowManager = require("./src/managers/window.manager");
@@ -40,8 +43,8 @@ class ApplicationController {
     }
 
     // Set default stealth app name early
-    app.setName("Terminal "); // Default to Terminal stealth mode
-    process.title = "Terminal ";
+    app.setName("JARVIX "); // Default to JARVIX mode
+    process.title = "JARVIX ";
 
     if (
       process.platform === "darwin" &&
@@ -57,6 +60,7 @@ class ApplicationController {
     app.on("window-all-closed", () => this.onWindowAllClosed());
     app.on("activate", () => this.onActivate());
     app.on("will-quit", () => this.onWillQuit());
+    app.on("before-quit", () => this.onBeforeQuit());
 
     this.setupIPCHandlers();
     this.setupServiceEventHandlers();
@@ -64,8 +68,8 @@ class ApplicationController {
 
   async onAppReady() {
     // Force stealth mode IMMEDIATELY when app is ready
-    app.setName("Terminal ");
-    process.title = "Terminal ";
+    app.setName("JARVIX ");
+    process.title = "JARVIX ";
 
     logger.info("Application starting", {
       version: config.get("app.version"),
@@ -84,8 +88,8 @@ class ApplicationController {
       await windowManager.initializeWindows();
       this.setupGlobalShortcuts();
 
-      // Initialize default stealth mode with terminal icon
-      this.updateAppIcon("terminal");
+      // Initialize default stealth mode with jarvis icon
+      this.updateAppIcon("jarvis");
 
       this.isReady = true;
 
@@ -447,7 +451,28 @@ class ApplicationController {
             // Process each file
             for (const file of files) {
               if (file.type && (file.type.startsWith('image/') || file.type === 'application/pdf' || file.type.includes('document') || file.type.includes('word') || file.name.endsWith('.docx') || file.name.endsWith('.doc'))) {
-                // For images, PDFs, and documents, attempt visual processing (will handle errors gracefully)
+                // Check premium access for image processing
+                const premiumAccess = await paymentService.validatePremiumAccess('image_processing');
+                
+                if (!premiumAccess.allowed) {
+                  // Send premium upgrade prompt to user
+                  const chatGPTWindow = windowManager.getWindow('chatgpt');
+                  if (chatGPTWindow && !chatGPTWindow.isDestroyed()) {
+                    const upgradeMessage = this.buildPremiumUpgradeMessage(file.name, premiumAccess.upgradePrompt);
+                    chatGPTWindow.webContents.send('llm-response', {
+                      response: upgradeMessage,
+                      metadata: { 
+                        processingTime: 0, 
+                        usedFallback: true,
+                        requiresPremium: true,
+                        upgradePrompt: premiumAccess.upgradePrompt
+                      }
+                    });
+                  }
+                  continue; // Skip processing this file
+                }
+                
+                // Handle different file types appropriately
                 try {
                   const sessionHistory = sessionManager.getOptimizedHistory();
                   const skillsRequiringProgrammingLanguage = ['dsa'];
@@ -466,13 +491,96 @@ class ApplicationController {
                     throw new Error('Invalid file format');
                   }
                   
-                  const llmResult = await llmService.processImageWithSkill(
-                    buffer,
-                    file.type,
-                    this.activeSkill,
-                    sessionHistory.recent,
-                    needsProgrammingLanguage ? this.codingLanguage : null
-                  );
+                  let llmResult;
+                  
+                  if (file.type === 'application/pdf') {
+                    // Handle PDF files with text extraction (like ChatGPT backend)
+                    logger.info('Processing PDF file with text extraction', { fileName: file.name });
+                    
+                    try {
+                      // First try to extract text from PDF
+                      const pdfResult = await documentService.extractTextFromBuffer(buffer);
+                      
+                      if (pdfResult.success && documentService.isTextMeaningful(pdfResult.text)) {
+                        // Process the extracted text with LLM
+                        const formattedContent = documentService.formatPDFContent(pdfResult.text, pdfResult.metadata);
+                        const prompt = `${text || 'Please analyze this PDF document:'}\n\n${formattedContent}`;
+                        
+                        llmResult = await llmService.processTextWithSkill(
+                          prompt,
+                          this.activeSkill,
+                          sessionHistory.recent,
+                          needsProgrammingLanguage ? this.codingLanguage : null
+                        );
+                        
+                        // Add metadata about PDF processing
+                        llmResult.metadata.isPdfAnalysis = true;
+                        llmResult.metadata.pdfPages = pdfResult.metadata.pages;
+                        
+                      } else {
+                        throw new Error('Could not extract meaningful text from PDF - may contain mainly images or complex formatting');
+                      }
+                    } catch (pdfError) {
+                      logger.warn('PDF text extraction failed, providing helpful guidance', { error: pdfError.message });
+                      
+                      // Provide helpful message like ChatGPT would
+                      llmResult = {
+                        response: `I can see you've uploaded a PDF file "${file.name}". While I have PDF processing capabilities, this particular PDF seems to contain complex formatting, images, or be image-based.
+
+For the best results with this PDF, try:
+
+📸 **Convert to Images**: Take screenshots of the PDF pages and upload them as image files - I can analyze those perfectly!
+
+📝 **Copy Text**: If there's text content you'd like me to analyze, you can copy and paste it directly into our chat.
+
+🔄 **Retry**: Sometimes re-uploading the PDF can help if there was a processing issue.
+
+I'm here to help analyze your content once it's in a format I can process effectively!`,
+                        metadata: {
+                          processingTime: 0,
+                          usedFallback: true,
+                          isPdfAnalysis: true,
+                          pdfProcessingFailed: true
+                        }
+                      };
+                    }
+                  } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || 
+                           file.type === 'application/msword' || 
+                           file.name.endsWith('.docx') || 
+                           file.name.endsWith('.doc')) {
+                    // Handle Word documents with text extraction
+                    logger.info('Processing Word document', { fileName: file.name });
+                    const wordResult = await documentService.extractTextFromWordBuffer(buffer);
+                    
+                    if (wordResult.success && documentService.isTextMeaningful(wordResult.text)) {
+                      // Process the extracted text with LLM
+                      const formattedContent = documentService.formatWordContent(wordResult.text, wordResult.metadata);
+                      const prompt = `${text || 'Please analyze this Word document:'}\n\n${formattedContent}`;
+                      
+                      llmResult = await llmService.processTextWithSkill(
+                        prompt,
+                        this.activeSkill,
+                        sessionHistory.recent,
+                        needsProgrammingLanguage ? this.codingLanguage : null
+                      );
+                      
+                      // Add metadata about Word processing
+                      llmResult.metadata.isWordAnalysis = true;
+                      llmResult.metadata.wordTextLength = wordResult.metadata.textLength;
+                      
+                    } else {
+                      throw new Error(wordResult.error || 'Could not extract meaningful text from Word document');
+                    }
+                  } else {
+                    // Handle images and other visual content
+                    llmResult = await llmService.processImageWithSkill(
+                      buffer,
+                      file.type,
+                      this.activeSkill,
+                      sessionHistory.recent,
+                      needsProgrammingLanguage ? this.codingLanguage : null
+                    );
+                  }
 
                   // Send response to ChatGPT window
                   const chatGPTWindow = windowManager.getWindow('chatgpt');
@@ -518,8 +626,23 @@ For best results with Word documents, try:
 3. Saving as a plain text file and uploading that instead
 
 I'd be happy to analyze the content once you provide it in a supported format!`;
+                    } else if (isImageFile) {
+                      // This is an image file that failed processing - show appropriate error
+                      errorMessage = `I encountered an issue processing the image "${file.name}" (${file.type || 'unknown format'}). 
+
+This could be due to:
+1. File corruption or invalid format
+2. Unsupported image variant
+3. Network connectivity issues
+
+Please try:
+1. Re-saving the image in a standard format (PNG, JPG)
+2. Uploading a different image
+3. Checking your internet connection
+
+Error details: ${imageError.message}`;
                     } else {
-                      errorMessage = `I can see you've uploaded "${file.name}". While I have advanced analysis capabilities, I can only directly process image files (PNG, JPG, etc.) through my visual interface.
+                      errorMessage = `I can see you've uploaded "${file.name}" (${file.type || 'unknown format'}). I can only directly process image files (PNG, JPG, GIF, etc.) through my visual interface.
 
 For best results, try:
 1. Copy-pasting text content directly into our chat
@@ -714,6 +837,17 @@ I'd be happy to help analyze your content once it's in a supported format!`;
       }
     });
 
+    // Auth window handlers
+    ipcMain.handle("show-auth", async () => {
+      await windowManager.showAuth();
+      return { success: true };
+    });
+
+    ipcMain.handle("hide-auth", () => {
+      windowManager.hideAuth();
+      return { success: true };
+    });
+
     // Settings handlers
     ipcMain.handle("show-settings", () => {
       windowManager.showSettings();
@@ -776,6 +910,11 @@ I'd be happy to help analyze your content once it's in a supported format!`;
       // Use the same expansion logic for now, can be enhanced later
       windowManager.expandLLMWindow(contentMetrics);
       return { success: true, contentMetrics };
+    });
+
+    // Header double-click handler for window enlargement
+    ipcMain.on("header-double-click", (event, windowType) => {
+      windowManager.toggleWindowSize(windowType);
     });
 
     ipcMain.handle("minimize-window", (event) => {
@@ -850,6 +989,468 @@ I'd be happy to help analyze your content once it's in a supported format!`;
         process.exit(1);
       }
     });
+
+    // Payment and subscription handlers
+    ipcMain.handle("initiate-premium-upgrade", async (event, plan = 'monthly') => {
+      try {
+        const result = await paymentService.initiatePremiumUpgrade(plan);
+        return result;
+      } catch (error) {
+        logger.error("Failed to initiate premium upgrade", { error: error.message, plan });
+        return {
+          success: false,
+          error: error.message,
+          message: 'Failed to initiate premium upgrade. Please try again.'
+        };
+      }
+    });
+
+    ipcMain.handle("check-premium-status", async () => {
+      try {
+        const status = await paymentService.checkPremiumStatus();
+        return status;
+      } catch (error) {
+        logger.error("Failed to check premium status", { error: error.message });
+        return {
+          isPremium: false,
+          status: 'error',
+          message: 'Unable to verify premium status'
+        };
+      }
+    });
+
+    ipcMain.handle("cancel-subscription", async () => {
+      try {
+        const result = await paymentService.cancelSubscription();
+        return result;
+      } catch (error) {
+        logger.error("Failed to cancel subscription", { error: error.message });
+        return {
+          success: false,
+          message: 'Failed to cancel subscription. Please contact support.'
+        };
+      }
+    });
+
+    ipcMain.handle("get-subscription-management", async () => {
+      try {
+        const management = await paymentService.getSubscriptionManagement();
+        return management;
+      } catch (error) {
+        logger.error("Failed to get subscription management", { error: error.message });
+        return {
+          hasSubscription: false,
+          message: 'Unable to load subscription information',
+          error: error.message
+        };
+      }
+    });
+
+    // Authentication handlers
+    ipcMain.handle("auth-sign-up", async (event, email, password) => {
+      try {
+        const result = await supabaseService.signUp(email, password);
+        return result;
+      } catch (error) {
+        logger.error("Failed to sign up user", { error: error.message, email });
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+    });
+
+    ipcMain.handle("auth-sign-in", async (event, email, password) => {
+      try {
+        const result = await supabaseService.signIn(email, password);
+        return result;
+      } catch (error) {
+        logger.error("Failed to sign in user", { error: error.message, email });
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+    });
+
+    ipcMain.handle("auth-sign-out", async () => {
+      try {
+        const result = await supabaseService.signOut();
+        return result;
+      } catch (error) {
+        logger.error("Failed to sign out user", { error: error.message });
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+    });
+
+    ipcMain.handle("auth-get-user", () => {
+      const user = supabaseService.getCurrentUser();
+      return {
+        isAuthenticated: supabaseService.isAuthenticated(),
+        user: user ? { id: user.id, email: user.email } : null
+      };
+    });
+
+    // New auth contract for React renderer
+    ipcMain.handle("auth-google-signin", async (event) => {
+      try {
+
+        // Get the OAuth URL from Supabase
+        const urlResult = await supabaseService.signInWithGoogle();
+        
+        if (!urlResult.success || !urlResult.url) {
+          throw new Error('Failed to generate OAuth URL');
+        }
+
+        // Create a popup window for Google OAuth
+        const authWindow = new BrowserWindow({
+          width: 500,
+          height: 600,
+          webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            enableRemoteModule: false
+          },
+          show: true,
+          modal: true,
+          parent: windowManager.getWindow('chatgpt'),
+          autoHideMenuBar: true,
+          title: 'Sign in with Google'
+        });
+
+        // Load the OAuth URL
+        await authWindow.loadURL(urlResult.url);
+
+        const result = await new Promise((resolve) => {
+          const handleCallback = async (navigationUrl) => {
+            try {
+              const url = new URL(navigationUrl);
+              // Check if this is the callback URL or contains access_token
+              if (url.pathname === '/auth/v1/callback' || url.hash.includes('access_token=')) {
+                const params = new URLSearchParams(url.hash.substring(1));
+                const accessToken = params.get('access_token');
+                const refreshToken = params.get('refresh_token');
+                if (accessToken && refreshToken) {
+                  try {
+                    const sessionResult = await supabaseService.handleOAuthCallback(accessToken, refreshToken);
+                    authWindow.close();
+                    resolve({ success: true, user: sessionResult.user });
+                    return;
+                  } catch (err) {
+                    logger.error('Failed to handle OAuth callback', { error: err.message });
+                    authWindow.close();
+                    resolve({ success: false, error: 'Failed to complete authentication' });
+                    return;
+                  }
+                }
+              }
+
+              // If URL contains localhost:3000, prevent the navigation
+              if (url.hostname === 'localhost' && url.port === '3000') {
+                logger.warn('Prevented navigation to localhost:3000, extracting tokens from current URL');
+                const currentUrl = authWindow.webContents.getURL();
+                if (currentUrl.includes('access_token=')) {
+                  await handleCallback(currentUrl);
+                }
+              }
+            } catch (err) {
+              logger.error('Error handling callback URL', { error: err.message, url: navigationUrl });
+            }
+          };
+
+          authWindow.webContents.on('will-redirect', async (e, navigationUrl) => {
+            await handleCallback(navigationUrl);
+          });
+          authWindow.webContents.on('did-navigate', async (e, navigationUrl) => {
+            await handleCallback(navigationUrl);
+          });
+          authWindow.webContents.on('did-finish-load', async () => {
+            const currentUrl = authWindow.webContents.getURL();
+            await handleCallback(currentUrl);
+          });
+          authWindow.webContents.on('did-fail-load', async (e, errorCode, errorDescription, validatedURL) => {
+            if (validatedURL.includes('access_token=')) {
+              await handleCallback(validatedURL);
+            }
+          });
+
+          authWindow.on('closed', () => {
+            resolve({ success: false, error: 'Authentication window closed' });
+          });
+        });
+
+        if (!result.success) {
+          event.sender.send('auth-login-failed', result.error || 'Authentication failed');
+          return { success: false, error: result.error };
+        }
+
+        // Emit success event to renderer with cached session
+        const session = supabaseService.getCachedSession();
+        if (session) {
+          event.sender.send('auth-login-success', session);
+        }
+        return { success: true };
+
+      } catch (error) {
+        logger.error("Failed to initiate Google sign-in", { error: error.message });
+
+        // Try to extract tokens from error message (common with localhost redirect)
+        if (error.message && error.message.includes('access_token=')) {
+          try {
+            const urlMatch = error.message.match(/loading '([^']+)'/);
+            if (urlMatch && urlMatch[1]) {
+              const url = new URL(urlMatch[1]);
+              const params = new URLSearchParams(url.hash.substring(1));
+              const accessToken = params.get('access_token');
+              const refreshToken = params.get('refresh_token');
+              if (accessToken && refreshToken) {
+                const sessionResult = await supabaseService.handleOAuthCallback(accessToken, refreshToken);
+                const session = supabaseService.getCachedSession();
+                if (session) event.sender.send('auth-login-success', session);
+                return { success: true };
+              }
+            }
+          } catch (parseError) {
+            logger.error('Failed to parse tokens from error message', { error: parseError.message });
+          }
+        }
+
+        event.sender.send('auth-login-failed', error.message);
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle("auth-signout", async (event) => {
+      try {
+        await supabaseService.signOut();
+        supabaseService.clearSession();
+        
+        // Emit logout event to renderer
+        event.sender.send('auth-logged-out');
+        
+        return { success: true };
+      } catch (error) {
+        logger.error("Sign out failed", { error: error.message });
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle("auth-get-cached-session", () => {
+      try {
+        const session = supabaseService.getCachedSession();
+        return session;
+      } catch (error) {
+        logger.error("Failed to get cached session", { error: error.message });
+        return null;
+      }
+    });
+
+    ipcMain.handle("auth-ensure-device-registered", async () => {
+      try {
+        await supabaseService.ensureDeviceRegistered();
+        return { success: true };
+      } catch (error) {
+        logger.error("Failed to register device", { error: error.message });
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle("auth-audit", async (event, auditEvent) => {
+      try {
+        await supabaseService.auditAuthEvent(auditEvent);
+        return { success: true };
+      } catch (error) {
+        logger.error("Failed to audit auth event", { error: error.message, event: auditEvent });
+        return { success: false, error: error.message };
+      }
+    });
+
+    // Google OAuth temporarily disabled
+    /*
+    ipcMain.handle("auth-google-sign-in", async () => {
+      try {
+        // Get the OAuth URL from Supabase
+        const urlResult = await supabaseService.signInWithGoogle();
+        
+        if (!urlResult.success || !urlResult.url) {
+          throw new Error('Failed to generate OAuth URL');
+        }
+
+        // Create a popup window for Google OAuth
+        const authWindow = new BrowserWindow({
+          width: 500,
+          height: 600,
+          webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            enableRemoteModule: false
+          },
+          show: true,
+          modal: true,
+          parent: windowManager.getWindow('chatgpt'),
+          autoHideMenuBar: true,
+          title: 'Sign in with Google'
+        });
+
+        // Load the OAuth URL
+        await authWindow.loadURL(urlResult.url);
+
+        return new Promise((resolve) => {
+          // Handle the callback URL - check both redirect and navigation events
+          const handleCallback = async (navigationUrl) => {
+            try {
+              const url = new URL(navigationUrl);
+              
+              // Check if this is the callback URL or contains access_token
+              if (url.pathname === '/auth/v1/callback' || url.hash.includes('access_token=')) {
+                // Parse the hash fragment for tokens
+                const params = new URLSearchParams(url.hash.substring(1));
+                const accessToken = params.get('access_token');
+                const refreshToken = params.get('refresh_token');
+
+                if (accessToken && refreshToken) {
+                  try {
+                    // Set the session in Supabase
+                    const sessionResult = await supabaseService.handleOAuthCallback(accessToken, refreshToken);
+                    
+                    authWindow.close();
+                    resolve({
+                      success: true,
+                      user: sessionResult.user
+                    });
+                    return;
+                  } catch (error) {
+                    logger.error('Failed to handle OAuth callback', { error: error.message });
+                    authWindow.close();
+                    resolve({
+                      success: false,
+                      error: 'Failed to complete authentication'
+                    });
+                    return;
+                  }
+                }
+              }
+              
+              // If URL contains localhost:3000, prevent the navigation
+              if (url.hostname === 'localhost' && url.port === '3000') {
+                logger.warn('Prevented navigation to localhost:3000, extracting tokens from current URL');
+                // Extract tokens from the current URL
+                const currentUrl = authWindow.webContents.getURL();
+                if (currentUrl.includes('access_token=')) {
+                  await handleCallback(currentUrl);
+                }
+              }
+            } catch (error) {
+              logger.error('Error handling callback URL', { error: error.message, url: navigationUrl });
+            }
+          };
+
+          // Listen for redirects
+          authWindow.webContents.on('will-redirect', async (event, navigationUrl) => {
+            await handleCallback(navigationUrl);
+          });
+
+          // Listen for navigation events
+          authWindow.webContents.on('did-navigate', async (event, navigationUrl) => {
+            await handleCallback(navigationUrl);
+          });
+
+          // Listen for page finish loading
+          authWindow.webContents.on('did-finish-load', async () => {
+            const currentUrl = authWindow.webContents.getURL();
+            await handleCallback(currentUrl);
+          });
+
+          // Handle navigation errors (like ERR_CONNECTION_REFUSED to localhost:3000)
+          authWindow.webContents.on('did-fail-load', async (event, errorCode, errorDescription, validatedURL) => {
+            // Check if the URL contains access tokens even though it failed to load
+            if (validatedURL.includes('access_token=')) {
+              await handleCallback(validatedURL);
+            }
+          });
+
+          // Handle window closed
+          authWindow.on('closed', () => {
+            resolve({
+              success: false,
+              error: 'Authentication window closed'
+            });
+          });
+        });
+
+      } catch (error) {
+        logger.error("Failed to initiate Google sign-in", { error: error.message });
+        
+        // Check if the error message contains access tokens (common with localhost redirect issues)
+        if (error.message && error.message.includes('access_token=')) {
+          try {
+            // Extract the URL from the error message
+            const urlMatch = error.message.match(/loading '([^']+)'/);
+            if (urlMatch && urlMatch[1]) {
+              const url = new URL(urlMatch[1]);
+              const params = new URLSearchParams(url.hash.substring(1));
+              const accessToken = params.get('access_token');
+              const refreshToken = params.get('refresh_token');
+
+              if (accessToken && refreshToken) {
+                logger.info('Extracted tokens from error message, attempting authentication');
+                const sessionResult = await supabaseService.handleOAuthCallback(accessToken, refreshToken);
+                
+                return {
+                  success: true,
+                  user: sessionResult.user
+                };
+              }
+            }
+          } catch (parseError) {
+            logger.error('Failed to parse tokens from error message', { error: parseError.message });
+          }
+        }
+        
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+    });
+    */
+  }
+
+  buildPremiumUpgradeMessage(fileName, upgradePrompt) {
+    if (!upgradePrompt) {
+      return `I can see you've uploaded "${fileName}". Image processing requires a premium subscription. Please upgrade to access this feature.`;
+    }
+
+    const { title, message, features, plans } = upgradePrompt;
+    
+    let upgradeMessage = `**${title}**\n\n${message}\n\n`;
+    
+    if (features && features.length > 0) {
+      upgradeMessage += `**Features included:**\n${features.map(f => `• ${f}`).join('\n')}\n\n`;
+    }
+    
+    if (plans) {
+      upgradeMessage += `**Choose your plan:**\n\n`;
+      
+      if (plans.monthly) {
+        upgradeMessage += `**${plans.monthly.name}** - ${plans.monthly.price}\n`;
+      }
+      
+      if (plans.yearly) {
+        upgradeMessage += `**${plans.yearly.name}** - ${plans.yearly.price}`;
+        if (plans.yearly.savings) {
+          upgradeMessage += ` (${plans.yearly.savings})`;
+        }
+        upgradeMessage += '\n';
+      }
+      
+      upgradeMessage += '\nClick "Upgrade to Premium" below to get started! 🚀';
+    }
+    
+    return upgradeMessage;
   }
 
   toggleSpeechRecognition() {
@@ -1257,9 +1858,8 @@ I'd be happy to help analyze your content once it's in a supported format!`;
   }
 
   onWindowAllClosed() {
-    if (process.platform !== "darwin") {
-      app.quit();
-    }
+    // Always quit when all windows are closed (including macOS)
+    app.quit();
   }
 
   onActivate() {
@@ -1283,9 +1883,37 @@ I'd be happy to help analyze your content once it's in a supported format!`;
     }
   }
 
+  onBeforeQuit() {
+    logger.info("Application before quit - starting cleanup");
+    
+    try {
+      // Unregister all global shortcuts immediately
+      globalShortcut.unregisterAll();
+      
+      // Hide all windows first
+      windowManager.hideAllWindows();
+      
+    } catch (error) {
+      logger.error("Error during before quit cleanup", { error: error.message });
+    }
+  }
+
   onWillQuit() {
-    globalShortcut.unregisterAll();
-    windowManager.destroyAllWindows();
+    logger.info("Application will quit - final cleanup");
+    
+    try {
+      // Destroy all windows
+      windowManager.destroyAllWindows();
+      
+      // Force exit after short delay if app doesn't quit properly
+      setTimeout(() => {
+        process.exit(0);
+      }, 500);
+      
+    } catch (error) {
+      logger.error("Error during quit cleanup", { error: error.message });
+      process.exit(1);
+    }
 
     const sessionStats = sessionManager.getMemoryUsage();
     logger.info("Application shutting down", {
@@ -1357,20 +1985,23 @@ I'd be happy to help analyze your content once it's in a supported format!`;
       const path = require("path");
       const fs = require("fs");
 
+      // Force jarvis icon only - no other icons allowed
+      iconKey = "jarvis";
+
       // Icon mapping for available icons in assests/icons folder
       const iconPaths = {
+        jarvis: "assests/icons/jarvis.png",
         terminal: "assests/icons/terminal.png",
         activity: "assests/icons/activity.png",
-        settings: "assests/icons/settings.png",
-        jarvis: "assests/icons/activity.png", // Use activity icon as fallback for JARVIX
+        settings: "assests/icons/settings.png"
       };
 
       // App name mapping for stealth mode
       const appNames = {
+        jarvis: "JARVIX ",
         terminal: "Terminal ",
         activity: "Activity Monitor ",
-        settings: "System Settings ",
-        jarvis: "JARVIX ",
+        settings: "System Settings "
       };
 
       const iconPath = iconPaths[iconKey];
@@ -1381,7 +2012,7 @@ I'd be happy to help analyze your content once it's in a supported format!`;
         return { success: false, error: "Invalid icon key" };
       }
 
-      const fullIconPath = path.resolve(iconPath);
+      const fullIconPath = path.join(__dirname, iconPath);
 
       if (!fs.existsSync(fullIconPath)) {
         logger.error("Icon file not found", {
@@ -1466,7 +2097,7 @@ I'd be happy to help analyze your content once it's in a supported format!`;
           // Force dock refresh
           setTimeout(() => {
             app.dock.setIcon(
-              require("path").resolve(`assests/icons/${iconKey}.png`)
+              require("path").join(__dirname, `assests/icons/${iconKey}.png`)
             );
           }, 50);
         }

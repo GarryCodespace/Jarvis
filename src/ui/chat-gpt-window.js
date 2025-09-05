@@ -16,8 +16,18 @@ class ChatGPTWindowUI {
     this.setupEventListeners();
     this.updateChatTitle();
     
-    // Add a welcome message
-    this.addMessage('assistant', 'Good day, sir. I\'m J.A.R.V.I.X, your AI assistant. I can help you with a wide variety of tasks including answering questions, writing, coding, analysis, and creative projects. How may I assist you today?');
+    // Always treat as authenticated - no login required
+    this.isAuthenticated = true;
+    this.currentUser = {
+      id: 'user-' + Date.now(),
+      email: 'user@jarvix.com',
+      user_metadata: {
+        full_name: 'User',
+        avatar_url: null
+      }
+    };
+    
+    this.addMessage('assistant', 'Good day, Sir. J.A.R.V.I.S at your service. I am fully operational and ready to assist you with any task you require - be it analysis, programming, research, or creative endeavors. My systems are optimized for maximum efficiency and accuracy. How may I be of assistance today?');
     
     console.log('[ChatGPT] Window initialized');
   }
@@ -139,7 +149,7 @@ class ChatGPTWindowUI {
   clearChat() {
     this.messages = [];
     this.chatMessages.innerHTML = '';
-    this.addMessage('assistant', 'Good day, sir. I\'m J.A.R.V.I.X, your AI assistant. I can help you with a wide variety of tasks including answering questions, writing, coding, analysis, and creative projects. How may I assist you today?');
+    this.addMessage('assistant', 'Systems reset complete, Sir. J.A.R.V.I.S ready for new tasks. I await your instructions.');
   }
 
   // Rendering
@@ -275,6 +285,77 @@ class ChatGPTWindowUI {
     this.addMessageToUI(role, content);
   }
 
+  addPremiumUpgradeMessage(content, upgradePrompt) {
+    const message = {
+      role: 'assistant',
+      content,
+      timestamp: new Date().toISOString(),
+      isPremiumPrompt: true
+    };
+    
+    this.messages.push(message);
+    this.addPremiumUpgradeMessageToUI(content, upgradePrompt);
+  }
+
+  addPremiumUpgradeMessageToUI(content, upgradePrompt) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message assistant premium-upgrade';
+    
+    // Convert markdown content to HTML for better display
+    const formattedContent = this.formatMarkdownContent(content);
+    
+    // Extract plan information
+    const monthlyPlan = upgradePrompt.plans?.monthly;
+    
+    messageDiv.innerHTML = `
+      <div class="message-avatar">AI</div>
+      <div class="message-content">
+        <div class="message-text premium-message">
+          ${formattedContent}
+        </div>
+        <div class="premium-upgrade-panel">
+          <div class="upgrade-plans">
+            ${monthlyPlan ? `
+              <div class="plan-option monthly-only" data-plan="monthly">
+                <div class="plan-header">
+                  <span class="plan-name">${monthlyPlan.name}</span>
+                  <span class="plan-price">${monthlyPlan.price}</span>
+                </div>
+                <button class="upgrade-btn upgrade-btn-primary" onclick="chatUI.upgradeToPremium('monthly')">
+                  Upgrade to Premium
+                </button>
+              </div>
+            ` : ''}
+          </div>
+          <div class="upgrade-actions">
+            <button class="status-check-btn" onclick="chatUI.checkPremiumStatus()">
+              Check Status
+            </button>
+          </div>
+        </div>
+        <div class="message-actions">
+          <button class="message-action-btn" onclick="chatUI.copyMessage(this)">
+            <i class="fas fa-copy"></i>
+            Copy
+          </button>
+        </div>
+      </div>
+    `;
+    
+    this.chatMessages.appendChild(messageDiv);
+    this.scrollToBottom();
+  }
+
+  formatMarkdownContent(content) {
+    return content
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/^• (.+)/gm, '<li>$1</li>')
+      .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
+      .replace(/\n\n/g, '</p><p>')
+      .replace(/^/, '<p>')
+      .replace(/$/, '</p>');
+  }
+
   async sendToLLM(content) {
     try {
       console.log('[ChatGPT] Sending to LLM:', content);
@@ -324,6 +405,15 @@ class ChatGPTWindowUI {
   handleLLMResponse(data) {
     if (data && data.response) {
       this.stopStreaming();
+      
+      // // Check if this is a premium upgrade prompt
+      // if (data.metadata && data.metadata.requiresPremium && data.metadata.upgradePrompt) {
+      //   this.addPremiumUpgradeMessage(data.response, data.metadata.upgradePrompt);
+      // } else {
+      //   this.addMessage('assistant', data.response);
+      // }
+
+      // Always show normal response (no premium checks)
       this.addMessage('assistant', data.response);
     }
   }
@@ -544,7 +634,11 @@ class ChatGPTWindowUI {
   }
 
   updateChatTitle() {
-    this.chatTitle.textContent = 'J.A.R.V.I.X';
+    // Simple clean title
+    this.chatTitle.innerHTML = `
+      <div class="jarvis-logo"></div>
+      J.A.R.V.I.X
+    `;
   }
 
   scrollToBottom() {
@@ -554,12 +648,30 @@ class ChatGPTWindowUI {
   }
 
   formatMessageContent(content) {
-    // Basic markdown formatting
+    // Enhanced markdown and paragraph formatting
     return content
+      // Handle numbered lists
+      .replace(/^\d+\.\s+(.+)$/gm, '<li>$1</li>')
+      // Handle bullet points
+      .replace(/^[-*]\s+(.+)$/gm, '<li>$1</li>')
+      // Handle bold text
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      // Handle italic text
       .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      // Handle inline code
       .replace(/`(.*?)`/g, '<code>$1</code>')
-      .replace(/\n/g, '<br>');
+      // Convert double line breaks to paragraphs
+      .replace(/\n\n+/g, '</p><p>')
+      // Convert single line breaks to <br>
+      .replace(/\n/g, '<br>')
+      // Wrap in paragraph tags if content doesn't start with HTML
+      .replace(/^(?!<)/, '<p>')
+      .replace(/(?<!>)$/, '</p>')
+      // Wrap consecutive list items in <ul> tags
+      .replace(/(<li>.*?<\/li>(?:\s*<br>\s*<li>.*?<\/li>)*)/gs, '<ul>$1</ul>')
+      // Clean up any empty paragraphs
+      .replace(/<p><\/p>/g, '')
+      .replace(/<p>\s*<br>\s*<\/p>/g, '');
   }
 
   escapeHtml(text) {
@@ -662,6 +774,56 @@ class ChatGPTWindowUI {
     this.updateAttachmentPreview();
     console.log('[ChatGPT] Cleared all attachments');
   }
+
+  // Premium upgrade methods
+  async upgradeToPremium(plan) {
+    try {
+      if (!window.electronAPI || !window.electronAPI.initiatePremiumUpgrade) {
+        console.error('[ChatGPT] ElectronAPI initiatePremiumUpgrade not available');
+        this.addMessage('assistant', 'Payment system is not available at the moment. Please try again later.');
+        return;
+      }
+
+      console.log('[ChatGPT] Initiating premium upgrade:', plan);
+      const result = await window.electronAPI.initiatePremiumUpgrade(plan);
+      
+      if (result.success) {
+        this.addMessage('assistant', result.message || 'Opening payment page...');
+      } else {
+        this.addMessage('assistant', result.message || 'Failed to initiate premium upgrade. Please try again.');
+      }
+    } catch (error) {
+      console.error('[ChatGPT] Failed to initiate premium upgrade:', error);
+      this.addMessage('assistant', 'An error occurred while initiating the premium upgrade. Please try again.');
+    }
+  }
+
+  async checkPremiumStatus() {
+    try {
+      if (!window.electronAPI || !window.electronAPI.checkPremiumStatus) {
+        console.error('[ChatGPT] ElectronAPI checkPremiumStatus not available');
+        this.addMessage('assistant', 'Cannot check premium status at the moment. Please try again later.');
+        return;
+      }
+
+      console.log('[ChatGPT] Checking premium status...');
+      const status = await window.electronAPI.checkPremiumStatus();
+      
+      if (status.isPremium) {
+        this.addMessage('assistant', `✅ Premium access is active! ${status.message}`);
+      } else if (status.status === 'not_authenticated') {
+        this.addMessage('assistant', `❌ ${status.message} Please sign in first.`);
+        this.showAuthPrompt();
+      } else {
+        this.addMessage('assistant', `❌ ${status.message || 'No active premium subscription found.'}`);
+      }
+    } catch (error) {
+      console.error('[ChatGPT] Failed to check premium status:', error);
+      this.addMessage('assistant', 'An error occurred while checking premium status. Please try again.');
+    }
+  }
+
+  // Authentication removed - no login required
 }
 
 // Initialize when DOM is ready

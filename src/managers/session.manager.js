@@ -189,7 +189,7 @@ class SessionManager {
   }
 
   /**
-   * Get conversation history for LLM context
+   * Get conversation history for LLM context with improved referencing
    */
   getConversationHistory(maxEntries = 20) {
     // Get recent conversation events (excluding system initialization)
@@ -202,8 +202,253 @@ class SessionManager {
       content: event.content,
       timestamp: event.timestamp,
       skill: event.skill,
-      action: event.action
+      action: event.action,
+      id: event.id
     }));
+  }
+
+  /**
+   * Get enhanced conversation context with better referencing
+   */
+  getEnhancedConversationContext(maxEntries = 15) {
+    const conversationEvents = this.sessionMemory
+      .filter(event => event.role !== 'system' || !event.metadata?.isInitialization);
+    
+    // Get recent events for immediate context
+    const recentEvents = conversationEvents.slice(-maxEntries);
+    
+    // Find conversation threads and important context
+    const contextualEvents = this.findContextualReferences(conversationEvents);
+    
+    // Combine recent + contextual events, removing duplicates
+    const allRelevantEvents = [...contextualEvents, ...recentEvents]
+      .filter((event, index, arr) => arr.findIndex(e => e.id === event.id) === index)
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    
+    return {
+      conversation: allRelevantEvents.map(event => ({
+        role: event.role,
+        content: event.content,
+        timestamp: event.timestamp,
+        skill: event.skill,
+        action: event.action,
+        id: event.id,
+        isContextual: contextualEvents.some(ce => ce.id === event.id)
+      })),
+      summary: this.generateConversationSummary(allRelevantEvents),
+      threadInfo: this.analyzeConversationThreads(allRelevantEvents)
+    };
+  }
+
+  /**
+   * Find contextually relevant events that should be included for better understanding
+   */
+  findContextualReferences(allEvents) {
+    const contextualEvents = [];
+    
+    // Look for events with follow-up questions or clarifications
+    const recentUserInputs = allEvents
+      .filter(event => event.role === 'user')
+      .slice(-5); // Last 5 user inputs
+    
+    for (const userInput of recentUserInputs) {
+      const content = userInput.content.toLowerCase();
+      
+      // Check for reference keywords
+      const referenceKeywords = [
+        'you said', 'you mentioned', 'earlier', 'before', 'previous', 
+        'that answer', 'your response', 'you told me', 'what you said',
+        'from before', 'remember when', 'like you said', 'as you mentioned'
+      ];
+      
+      const hasReference = referenceKeywords.some(keyword => content.includes(keyword));
+      
+      if (hasReference) {
+        // Find the conversation pair (user input + AI response) that this might be referencing
+        const eventIndex = allEvents.findIndex(e => e.id === userInput.id);
+        const contextWindow = allEvents.slice(Math.max(0, eventIndex - 10), eventIndex);
+        
+        // Add the most recent AI response before this reference
+        const lastAiResponse = contextWindow
+          .filter(e => e.role === 'model')
+          .pop();
+        
+        if (lastAiResponse && !contextualEvents.some(ce => ce.id === lastAiResponse.id)) {
+          contextualEvents.push(lastAiResponse);
+          
+          // Also add the user input that prompted that response
+          const responseIndex = allEvents.findIndex(e => e.id === lastAiResponse.id);
+          const promptingInput = allEvents
+            .slice(0, responseIndex)
+            .filter(e => e.role === 'user')
+            .pop();
+          
+          if (promptingInput && !contextualEvents.some(ce => ce.id === promptingInput.id)) {
+            contextualEvents.push(promptingInput);
+          }
+        }
+      }
+    }
+    
+    return contextualEvents;
+  }
+
+  /**
+   * Generate a summary of conversation context for better referencing
+   */
+  generateConversationSummary(events) {
+    const topics = new Set();
+    const skills = new Set();
+    let hasCode = false;
+    let hasImageAnalysis = false;
+    
+    // Validate events array
+    if (!Array.isArray(events)) {
+      return {
+        topics: [],
+        skills: [],
+        hasCode: false,
+        hasImageAnalysis: false,
+        eventCount: 0,
+        timeSpan: null
+      };
+    }
+    
+    events.forEach(event => {
+      // Ensure event exists and has required properties
+      if (!event || typeof event !== 'object') {
+        return;
+      }
+      
+      if (event.skill) {
+        skills.add(event.skill);
+      }
+      
+      if (event.content && typeof event.content === 'string') {
+        const content = event.content.toLowerCase();
+        
+        // Detect code discussions
+        if (content.includes('```') || content.includes('function') || content.includes('class')) {
+          hasCode = true;
+        }
+        
+        // Detect image analysis
+        if (event.action === 'ocr_extraction' || content.includes('image') || content.includes('screenshot')) {
+          hasImageAnalysis = true;
+        }
+        
+        // Extract potential topics (simple keyword extraction)
+        const words = content.split(/\s+/)
+          .filter(word => word && word.length > 4 && !['that', 'this', 'with', 'from', 'have', 'been', 'will'].includes(word))
+          .slice(0, 3);
+        words.forEach(word => topics.add(word));
+      }
+    });
+    
+    return {
+      topics: Array.from(topics).slice(0, 5),
+      skills: Array.from(skills),
+      hasCode,
+      hasImageAnalysis,
+      eventCount: events.length,
+      timeSpan: events.length > 0 && events[0] && events[events.length - 1] ? {
+        start: events[0].timestamp,
+        end: events[events.length - 1].timestamp
+      } : null
+    };
+  }
+
+  /**
+   * Analyze conversation threads to understand flow and references
+   */
+  analyzeConversationThreads(events) {
+    const threads = [];
+    let currentThread = null;
+    
+    events.forEach(event => {
+      if (event.role === 'user') {
+        // Start new thread or continue existing one
+        if (!currentThread || this.isNewTopic(event, currentThread)) {
+          if (currentThread) {
+            threads.push(currentThread);
+          }
+          currentThread = {
+            id: event.id,
+            topic: this.extractTopic(event.content),
+            skill: event.skill,
+            events: [event],
+            startTime: event.timestamp
+          };
+        } else {
+          currentThread.events.push(event);
+        }
+      } else if (event.role === 'model' && currentThread) {
+        currentThread.events.push(event);
+        currentThread.endTime = event.timestamp;
+      }
+    });
+    
+    if (currentThread) {
+      threads.push(currentThread);
+    }
+    
+    return {
+      threads: threads.slice(-3), // Keep last 3 conversation threads
+      currentThread: currentThread,
+      threadCount: threads.length
+    };
+  }
+
+  /**
+   * Determine if a user input represents a new topic or continues the current thread
+   */
+  isNewTopic(event, currentThread) {
+    if (!currentThread || currentThread.events.length === 0) return true;
+    
+    const content = event.content.toLowerCase();
+    const lastUserInput = currentThread.events
+      .filter(e => e.role === 'user')
+      .pop();
+    
+    if (!lastUserInput) return true;
+    
+    const lastContent = lastUserInput.content.toLowerCase();
+    
+    // Check for continuation indicators
+    const continuationWords = ['also', 'and', 'but', 'however', 'what about', 'how about'];
+    const hasContinuation = continuationWords.some(word => content.includes(word));
+    
+    // Check for reference words that indicate same topic
+    const referenceWords = ['it', 'this', 'that', 'they', 'these', 'those'];
+    const hasReference = referenceWords.some(word => content.startsWith(word));
+    
+    // Check for question words that might be follow-ups
+    const followupQuestions = ['why', 'how', 'what if', 'can you', 'could you'];
+    const isFollowup = followupQuestions.some(phrase => content.includes(phrase));
+    
+    // Different skill = likely new topic
+    if (event.skill !== currentThread.skill) return true;
+    
+    // Short responses that seem like follow-ups
+    if (content.length < 50 && (hasContinuation || hasReference || isFollowup)) return false;
+    
+    // Time gap > 5 minutes suggests new topic
+    const timeDiff = new Date(event.timestamp) - new Date(lastUserInput.timestamp);
+    if (timeDiff > 5 * 60 * 1000) return true;
+    
+    return false; // Default to continuing thread
+  }
+
+  /**
+   * Extract a simple topic identifier from content
+   */
+  extractTopic(content) {
+    const words = content.toLowerCase()
+      .split(/\s+/)
+      .filter(word => word.length > 3 && !/^(the|and|but|for|are|this|that|with|from)$/.test(word))
+      .slice(0, 2);
+    
+    return words.join(' ') || 'general';
   }
 
   /**
